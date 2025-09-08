@@ -14,12 +14,10 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
 
         let startY = 0;
         let startX = 0;
-        let isHorizontalSwipe = false;
 
         const handleTouchStart = (e: TouchEvent) => {
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
-            isHorizontalSwipe = false;
         };
 
         const handleTouchMove = (e: TouchEvent) => {
@@ -32,19 +30,14 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
 
             // If horizontal movement is greater than vertical, treat as horizontal swipe
             if (diffX > diffY && diffX > 10) {
-                isHorizontalSwipe = true;
                 // Prevent vertical scrolling for horizontal swipes
                 e.preventDefault();
-            } else if (diffY > diffX && diffY > 10) {
-                // Allow vertical scrolling for vertical swipes
-                isHorizontalSwipe = false;
             }
         };
 
         const handleTouchEnd = () => {
             startX = 0;
             startY = 0;
-            isHorizontalSwipe = false;
         };
 
         textArea.addEventListener('touchstart', handleTouchStart, { passive: true });
