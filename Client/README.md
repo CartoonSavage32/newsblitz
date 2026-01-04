@@ -1,138 +1,167 @@
-# NewsBlitz - Consolidated Architecture
+# NewsBlitz Frontend
 
-NewsBlitz is a simple news aggregation app with a single Next.js deployment.
+A modern Next.js news aggregation application with AI-powered summaries, built with React, TypeScript, and Tailwind CSS.
 
-## Architecture
+## Tech Stack
 
-- **Frontend**: Next.js App Router (React)
-- **Backend**: Next.js API Routes (merged into frontend)
+- **Framework**: Next.js 16.1 (App Router)
+- **UI Library**: React 19
+- **Styling**: Tailwind CSS 4
+- **State Management**: TanStack Query (React Query)
 - **Database**: Supabase (PostgreSQL)
-- **Summarization**: OpenRouter API
-- **Scraping**: Google News RSS
+- **Email**: Nodemailer (Gmail SMTP)
+- **Analytics**: Google Analytics 4
+- **Type Safety**: TypeScript
 
-## Setup
+## Features
 
-### 1. Environment Variables
+- 📰 **News Aggregation**: Browse news from multiple categories (AI, Health, Sports, Finance, Geopolitical, Crypto)
+- 🤖 **AI Summaries**: Concise, AI-generated summaries of news articles
+- 📱 **Responsive Design**: Optimized for both desktop and mobile devices
+- 🎨 **Dark Mode**: Built-in theme switching
+- 🔍 **SEO Optimized**: Dynamic article pages, sitemap, structured data
+- 📧 **Feedback Form**: Contact form with email delivery
+- 🎯 **Category Filtering**: Filter news by category with instant updates
 
-Copy `.env.example` to `.env.local` and fill in:
+## Getting Started
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-OPENROUTER_API_KEY=your_openrouter_api_key
-INGEST_SECRET=your_random_secret_here
+### Prerequisites
 
-# Email configuration for feedback form (Gmail)
-FEEDBACK_EMAIL_USER=your-email@gmail.com
-FEEDBACK_EMAIL_APP_PASSWORD=your_gmail_app_password
-FEEDBACK_EMAIL_TO=recipient@example.com  # Optional, defaults to FEEDBACK_EMAIL_USER
+- Node.js 18+ and npm
+- Supabase account and project
+- (Optional) Gmail account for feedback emails
+- (Optional) Google Analytics 4 account
 
-# SEO & Analytics
-NEXT_PUBLIC_SITE_URL=https://your-domain.com  # Required for sitemap, canonical links
-NEXT_PUBLIC_GA4_ID=G-XXXXXXXXXX  # Optional: Google Analytics 4 ID
-NEXT_PUBLIC_GOOGLE_VERIFICATION=your_google_verification_code  # Optional: For Google Search Console
-```
+### Installation
 
-### 2. Supabase Setup
-
-1. Create a Supabase project at https://supabase.com
-2. Run the migration in `supabase/migrations/001_create_news_articles.sql`
-3. Copy your project URL and anon key to `.env.local`
-
-### 3. OpenRouter Setup
-
-1. Sign up at https://openrouter.ai
-2. Get your API key
-3. Add it to `.env.local`
-
-### 4. Install Dependencies
+1. **Install dependencies**
 
 ```bash
 npm install
 ```
 
-### 5. Run Development Server
+2. **Set up environment variables**
+
+Create a `.env.local` file in the `Client` directory:
+
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Email Configuration (Optional - for feedback form)
+FEEDBACK_EMAIL_USER=your-email@gmail.com
+FEEDBACK_EMAIL_APP_PASSWORD=your_gmail_app_password
+FEEDBACK_EMAIL_TO=recipient@example.com  # Optional, defaults to FEEDBACK_EMAIL_USER
+
+# SEO & Analytics (Optional)
+NEXT_PUBLIC_SITE_URL=https://your-domain.com
+NEXT_PUBLIC_GA4_ID=G-XXXXXXXXXX
+NEXT_PUBLIC_GOOGLE_VERIFICATION=your_verification_code
+```
+
+3. **Run development server**
 
 ```bash
 npm run dev
 ```
 
-## Ingestion
-
-**Note:** Ingestion is handled by a separate Python service. See `NewsData/README.md` for details.
-
-The Python ingestion pipeline:
-- Scrapes Google News using Selenium
-- Extracts articles using Newspaper3k
-- Summarizes using OpenRouter API
-- Stores in Supabase
-
-To run ingestion:
-
-```bash
-cd NewsData
-python3 ingest.py
-```
-
-Or set up a cron job:
-
-```bash
-# Example: Run every 3 hours
-0 */3 * * * cd /path/to/NewsData && python3 ingest.py
-```
-
-## API Endpoints
-
-- `GET /api/news` - Get all news articles (grouped by category) - **Read-only from Supabase**
-- `GET /api/health` - Health check
-- `POST /api/feedback` - Submit feedback (sends email via Nodemailer/Gmail)
-- `POST /api/donate` - Dummy donation endpoint (optional)
-
-**Note:** Ingestion is handled by the separate Python service, not via API.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
 
 ```
 Client/
-├── app/
-│   ├── api/              # Next.js API routes (read-only from Supabase)
-│   ├── layout.tsx        # Root layout
-│   └── [pages]/          # Frontend pages
-├── lib/
-│   ├── supabase/         # Supabase client
-│   └── news/             # News repository (read-only)
+├── app/                    # Next.js App Router pages
+│   ├── api/               # API routes
+│   │   ├── feedback/     # Feedback form endpoint
+│   │   ├── health/        # Health check
+│   │   └── news/          # News articles endpoint
+│   ├── news/              # News pages
+│   │   ├── [slug]/        # Dynamic article pages (SEO)
+│   │   └── page.tsx       # News listing page
+│   ├── feedback/          # Feedback form page
+│   ├── layout.tsx         # Root layout with GA4
+│   ├── page.tsx           # Homepage
+│   ├── robots.ts          # Robots.txt generator
+│   └── sitemap.ts         # Sitemap generator
+├── lib/                   # Server-side utilities
+│   ├── news/              # News repository (Supabase)
+│   └── supabase/          # Supabase client
 ├── src/
-│   ├── components/       # React components
-│   ├── hooks/            # Custom hooks
-│   ├── Data/             # Data fetching logic
-│   └── shared/           # Shared schemas
+│   ├── components/        # React components
+│   │   ├── desktop/       # Desktop-specific components
+│   │   ├── mobile/        # Mobile-specific components
+│   │   └── ui/            # Reusable UI components
+│   ├── hooks/             # Custom React hooks
+│   ├── Data/              # Data fetching logic
+│   ├── lib/               # Client utilities
+│   └── shared/            # Shared TypeScript types
 └── supabase/
-    └── migrations/       # Database migrations
+    └── migrations/        # Database migrations
 ```
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
+
+## Key Features Implementation
+
+### SEO Optimization
+
+- **Dynamic Article Pages**: Each article has its own SEO-friendly URL (`/news/[slug]`)
+- **Structured Data**: JSON-LD Schema.org markup for articles
+- **Sitemap**: Auto-generated sitemap at `/sitemap.xml`
+- **Robots.txt**: Configured at `/robots.txt`
+- **Meta Tags**: OpenGraph and Twitter Cards for social sharing
+
+### Responsive Design
+
+- **Desktop**: Full-width carousel with side-by-side layout
+- **Mobile**: Swipeable card interface with bottom navigation
+- **Breakpoint**: 768px (tablet/desktop switch)
+
+### Data Flow
+
+1. Articles are fetched from Supabase via `/api/news`
+2. Data is transformed and cached using React Query
+3. Components render articles with proper linking
+4. Article pages are server-rendered for SEO
+
+## API Routes
+
+- `GET /api/news` - Fetch all news articles (grouped by category)
+- `GET /api/health` - Health check endpoint
+- `POST /api/feedback` - Submit feedback (sends email via Nodemailer)
 
 ## Deployment
 
 ### Vercel (Recommended)
 
-1. Push to GitHub
+1. Push code to GitHub
 2. Import project in Vercel
-3. Add environment variables
-4. Deploy
+3. Add environment variables in Vercel dashboard
+4. Deploy automatically on push
 
 ### Other Platforms
-
-Build and start:
 
 ```bash
 npm run build
 npm start
 ```
 
-## Migration from Old Architecture
+Make sure to set all required environment variables in your hosting platform.
 
-The old architecture had:
-- Separate Express backend (`API/` folder)
-- Python scraping pipeline (`NewsData/` folder)
-- Local JSON file storage
+## Notes
 
-All of this has been consolidated into this single Next.js app.
+- **News Ingestion**: Articles are ingested by a separate Python service (see `NewsData/` folder)
+- **Database**: This frontend only reads from Supabase, never writes
+- **Email**: Feedback form requires Gmail App Password (not regular password)
+- **SEO**: Article pages are server-rendered for optimal search engine indexing
+
+## License
+
+© 2025 NewsBlitz. All rights reserved.
