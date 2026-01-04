@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchNewsData } from "../Data/newsData";
+import { fetchNewsData } from "@/Data/newsData";
 import type { NewsArticle } from "../shared/schema";
 
 export function useNews() {
