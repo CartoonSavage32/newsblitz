@@ -134,7 +134,7 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
                     </Button>
                     <Button
                       variant="outline"
-                      className="text-primary-foreground border-primary-foreground/20"
+                      className="bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-sm"
                       onClick={() => {
                         // Track "Read more" click event for GA4
                         trackGA4Event('read_more_click', {

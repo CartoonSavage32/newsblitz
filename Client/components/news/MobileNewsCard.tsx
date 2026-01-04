@@ -132,7 +132,7 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                         </Button>
                         <Button
                             variant="outline"
-                            className="w-full text-white border-white/20 hover:bg-white/10"
+                            className="w-full bg-white/20 hover:bg-white/30 text-white border-white/40 backdrop-blur-sm"
                             onClick={() => {
                                 // Track "Read more" click event for GA4
                                 trackGA4Event('read_more_click', {

@@ -1,18 +1,20 @@
 import { ReadMoreButton } from '@/components/news/ReadMoreButton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { extractIdFromSlug, generateArticleSlug } from '@/lib/utils/slug';
 import { format } from 'date-fns';
-import { Calendar } from 'lucide-react';
+import { ArrowLeft, Calendar } from 'lucide-react';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
-import { getArticleById, getRelatedArticles } from '../../../lib/news/repository';
+import { getArticleById, getRelatedArticles } from '@/lib/news/repository';
 
 // Generate metadata for SEO
 // eslint-disable-next-line react-refresh/only-export-components
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const id = extractIdFromSlug(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const id = extractIdFromSlug(slug);
   if (!id) {
     return {
       title: 'Article Not Found | NewsBlitz',
@@ -37,7 +39,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     : article.description;
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
-  const articleUrl = `${siteUrl}/news/${params.slug}`;
+  const articleUrl = `${siteUrl}/news/${slug}`;
 
   return {
     title: `${seoTitle} | NewsBlitz`,
@@ -75,8 +77,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function ArticlePage({ params }: { params: { slug: string } }) {
-  const id = extractIdFromSlug(params.slug);
+export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const id = extractIdFromSlug(slug);
   if (!id) {
     notFound();
   }
@@ -90,7 +93,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
   const relatedArticles = await getRelatedArticles(article.category, article.id, 3);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
-  const articleSlug = params.slug;
+  const articleSlug = slug;
   const articleUrl = `${siteUrl}/news/${articleSlug}`;
 
   // Structured data (JSON-LD) for SEO
@@ -170,6 +173,20 @@ export default async function ArticlePage({ params }: { params: { slug: string }
       />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-4xl">
+          {/* Back Button */}
+          <div className="mb-6">
+            <Button
+              variant="ghost"
+              asChild
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Link href="/news">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to News
+              </Link>
+            </Button>
+          </div>
+
           {/* Breadcrumbs for SEO */}
           <nav aria-label="Breadcrumb" className="mb-6">
             <ol className="flex items-center gap-2 text-sm text-muted-foreground">

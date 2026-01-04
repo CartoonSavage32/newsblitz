@@ -107,13 +107,34 @@ export async function insertNewsArticles(articles: Omit<DBArticle, 'id' | 'creat
 
 /**
  * Get a single article by ID for SEO pages
+ * Supports both full UUID and 8-char prefix lookup
  */
 export async function getArticleById(id: string): Promise<NewsArticle | null> {
-  const { data, error } = await supabase
+  // Try exact match first (for full UUID)
+  let { data, error } = await supabase
     .from('news_articles')
     .select('*')
     .eq('id', id)
     .single();
+
+  // If not found and ID is 8 chars, try prefix match
+  // UUIDs in Supabase are stored as text, so we can use text pattern matching
+  if ((error || !data) && id.length === 8) {
+    // Fetch articles and filter client-side for prefix match
+    const { data: allData, error: allError } = await supabase
+      .from('news_articles')
+      .select('*')
+      .limit(1000); // Reasonable limit
+
+    if (!allError && allData) {
+      // Find article with ID starting with the 8-char prefix
+      const matched = allData.find((article: DBArticle) => article.id.startsWith(id));
+      if (matched) {
+        data = matched;
+        error = null;
+      }
+    }
+  }
 
   if (error || !data) {
     return null;
@@ -155,7 +176,7 @@ export async function getAllArticleIds(): Promise<Array<{ id: string; updated_at
     return [];
   }
 
-  return data.map((article) => ({
+  return data.map((article: { id: string; published_at: string | null; created_at: string }) => ({
     id: article.id,
     updated_at: article.published_at || article.created_at,
   }));
