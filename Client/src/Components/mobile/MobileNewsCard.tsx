@@ -1,7 +1,9 @@
 import { format } from "date-fns";
 import { Calendar } from "lucide-react";
+import Link from "next/link";
 import { useRef, useEffect } from "react";
 import type { NewsArticle } from "../../shared/schema";
+import { generateArticleSlug } from "../../lib/utils/slug";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -108,7 +110,12 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                         }}
                     >
                         <h2 className="text-2xl font-bold text-white leading-tight mb-2">
-                            {article.title}
+                            <Link 
+                                href={`/news/${generateArticleSlug(article.title, article.id)}`}
+                                className="hover:underline"
+                            >
+                                {article.title}
+                            </Link>
                         </h2>
                         <p className="text-white/80 text-sm leading-relaxed">
                             {article.description}
@@ -116,16 +123,28 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                     </div>
 
                     {/* Footer: Call-to-action and scroll indicator */}
-                    <div className="m-2 flex flex-col items-center" style={{ touchAction: 'pan-x' }}>
-                        <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                            <a
-                                href={article.readMoreUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block w-full"
-                            >
-                                Read More
-                            </a>
+                    <div className="m-2 flex flex-col items-center gap-2" style={{ touchAction: 'pan-x' }}>
+                        <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" asChild>
+                            <Link href={`/news/${generateArticleSlug(article.title, article.id)}`}>
+                                View Article
+                            </Link>
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            className="w-full text-white border-white/20 hover:bg-white/10"
+                            onClick={() => {
+                                // Track "Read more" click event for GA4
+                                if (typeof window !== 'undefined' && window.gtag) {
+                                    window.gtag('event', 'read_more_click', {
+                                        article_id: article.id,
+                                        article_title: article.title,
+                                        source_url: article.readMoreUrl,
+                                    });
+                                }
+                                window.open(article.readMoreUrl, "_blank", "noopener,noreferrer");
+                            }}
+                        >
+                            Read Source
                         </Button>
                     </div>
                 </div>

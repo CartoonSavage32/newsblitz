@@ -1,5 +1,5 @@
 import { Filter } from "lucide-react";
-import { Link } from "wouter";
+import Link from "next/link";
 import { Button } from "../ui/button";
 import { ThemeToggle } from "../ui/theme-toggle";
 

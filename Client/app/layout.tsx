@@ -1,0 +1,70 @@
+"use client";
+
+import { QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import Script from "next/script";
+import { queryClient } from "../src/lib/queryClient";
+import { DesktopNavbar } from "../src/components/navbar";
+import { GA4Tracker } from "../src/components/GA4Tracker";
+import { useMediaQuery } from "../src/hooks/useMobile";
+import "../src/index.css";
+
+export default function RootLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
+    const [mounted, setMounted] = useState(false);
+    const isMobile = useMediaQuery("(max-width: 768px)");
+    const ga4Id = process.env.NEXT_PUBLIC_GA4_ID;
+
+    // Initialize theme on mount
+    useEffect(() => {
+        setMounted(true);
+        const stored = localStorage.getItem('newsblitz-theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const shouldBeDark = stored === 'dark' || (!stored && prefersDark);
+
+        if (shouldBeDark) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, []);
+
+    return (
+        <html lang="en">
+            <head>
+                {/* GA4 Analytics */}
+                {ga4Id && (
+                    <>
+                        <Script
+                            src={`https://www.googletagmanager.com/gtag/js?id=${ga4Id}`}
+                            strategy="afterInteractive"
+                        />
+                        <Script id="ga4-init" strategy="afterInteractive">
+                            {`
+                                window.dataLayer = window.dataLayer || [];
+                                function gtag(){dataLayer.push(arguments);}
+                                gtag('js', new Date());
+                                gtag('config', '${ga4Id}', {
+                                    page_path: window.location.pathname,
+                                });
+                            `}
+                        </Script>
+                    </>
+                )}
+            </head>
+            <body>
+                <QueryClientProvider client={queryClient}>
+                    <GA4Tracker />
+                    <div className="h-screen flex flex-col">
+                        {mounted && !isMobile && <DesktopNavbar />}
+                        <main className="flex-grow overflow-auto">{children}</main>
+                    </div>
+                </QueryClientProvider>
+            </body>
+        </html>
+    );
+}
+

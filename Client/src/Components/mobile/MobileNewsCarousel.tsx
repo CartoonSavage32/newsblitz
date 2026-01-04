@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { NewsArticle } from "../../shared/schema";
 import { MobileNewsCard } from "./MobileNewsCard";
 
@@ -77,6 +77,12 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
         setDragRotation(0);
     }, []);
 
+    // Reset carousel to first article when news array changes (category filter change)
+    useEffect(() => {
+        setActiveIndex(0);
+        setDragRotation(0);
+    }, [news]);
+
     return (
         <div 
             className={`relative w-full h-full overflow-hidden ${className || ""}`}
@@ -87,7 +93,7 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
         >
             <AnimatePresence initial={false} custom={direction}>
                 <motion.div
-                    key={activeIndex}
+                    key={currentNews?.id || activeIndex}
                     custom={direction}
                     variants={variants}
                     initial="initial"

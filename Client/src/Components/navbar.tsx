@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import Link from "next/link";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./ui/theme-toggle";
 
@@ -30,11 +30,12 @@ export function DesktopNavbar() {
             <span>Feedback</span>
           </Link>
           <ThemeToggle />
-          <Link href="" className="inline-flex">
+          {/* Donation feature disabled for MVP */}
+          {/* <Link href="/donate" className="inline-flex">
             <Button variant="secondary" className="bg-primary text-primary-foreground btn-hover" disabled={true}>
               Donate
             </Button>
-          </Link>
+          </Link> */}
         </nav>
       </div>
     </header>

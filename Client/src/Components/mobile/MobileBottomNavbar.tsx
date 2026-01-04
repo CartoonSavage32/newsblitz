@@ -1,5 +1,5 @@
 import { Heart, Home, MessageSquare, Newspaper } from "lucide-react";
-import { Link } from "wouter";
+import Link from "next/link";
 import { Button } from "../ui/button";
 
 interface MobileBottomNavbarProps {
@@ -28,6 +28,7 @@ export function MobileBottomNavbar({ disableDonate = true }: MobileBottomNavbarP
                         <span className="text-xs">Feedback</span>
                     </Button>
                 </Link>
+                {/* Donation feature disabled for MVP */}
                 {disableDonate ? (
                     <Button 
                         variant="ghost" 

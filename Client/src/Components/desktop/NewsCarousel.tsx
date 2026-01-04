@@ -1,8 +1,10 @@
 import { format } from "date-fns"
 import useEmblaCarousel from "embla-carousel-react"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import type { NewsArticle } from "../../shared/schema"
+import { generateArticleSlug } from "../../lib/utils/slug"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 
@@ -33,22 +35,29 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
     emblaApi.on("select", onSelect)
   }, [emblaApi, onSelect])
 
+  // Reset carousel to first article when articles change (category filter change)
+  useEffect(() => {
+    if (!emblaApi) return
+    emblaApi.scrollTo(0)
+    setSelectedIndex(0)
+  }, [articles, emblaApi])
+
   return (
     <div className="relative shrink-0 w-full h-full overflow-hidden">
       {/* Embla main viewport */}
       <div className="w-full h-full" ref={emblaRef}>
         {/* Slides container: horizontal scrolling */}
         <div className="flex h-full">
-          {articles.map((article, index) => (
+          {articles.map((article) => (
             <div
-              key={article.news_number || index}
+              key={article.id}
               className="relative flex-[0_0_100%] w-full h-full overflow-hidden"
             >
               {/* Blurred background */}
               <div
                 className="absolute inset-0"
                 style={{
-                  backgroundImage: `url(${article.imageUrl || "/placeholder.svg"})`,
+                  backgroundImage: `url(${article.imageUrl})`,
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                   filter: "blur(12px)",
@@ -60,11 +69,13 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
               <div className="relative z-10 flex w-full h-full">
                 {/* Left half: the news image */}
                 <div className="w-1/2 h-full overflow-hidden">
-                  <img
-                    src={article.imageUrl || "/placeholder.svg"}
-                    alt={article.title}
-                    className="w-full h-full object-cover"
-                  />
+                  {article.imageUrl && (
+                    <img
+                      src={article.imageUrl}
+                      alt={article.title}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
                 </div>
 
                 {/* Right half: glass overlay for text, scroll if needed */}
@@ -97,22 +108,46 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
                   </div>
 
                   {/* Title and description */}
-                  <h2 className="text-2xl md:text-4xl font-bold mb-2">{article.title}</h2>
+                  <h2 className="text-2xl md:text-4xl font-bold mb-2">
+                    <Link 
+                      href={`/news/${generateArticleSlug(article.title, article.id)}`}
+                      className="hover:underline"
+                    >
+                      {article.title}
+                    </Link>
+                  </h2>
                   <p className="text-sm md:text-base leading-relaxed">
                     {article.description}
                   </p>
 
                   {/* Read more button pinned at bottom, with extra bottom padding */}
-                  <div className="mt-auto flex justify-start mb-4 pt-7">
+                  <div className="mt-auto flex justify-start gap-2 mb-4 pt-7">
                     <Button
                       variant="secondary"
                       className="bg-primary text-primary-foreground font-bold"
+                      asChild
+                    >
+                      <Link href={`/news/${generateArticleSlug(article.title, article.id)}`}>
+                        View Article
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-primary-foreground border-primary-foreground/20"
                       onClick={() => {
+                        // Track "Read more" click event for GA4
+                        if (typeof window !== 'undefined' && window.gtag) {
+                          window.gtag('event', 'read_more_click', {
+                            article_id: article.id,
+                            article_title: article.title,
+                            source_url: article.readMoreUrl,
+                          });
+                        }
                         const newWindow = window.open(article.readMoreUrl, "_blank", "noopener,noreferrer")
                         if (newWindow) newWindow.opener = null
                       }}
                     >
-                      Read More
+                      Source
                     </Button>
                   </div>
                 </div>
