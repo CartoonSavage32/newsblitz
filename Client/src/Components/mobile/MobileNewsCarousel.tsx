@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import type { NewsArticle } from "../../shared/schema";
+import type { NewsArticle } from "@/shared/schema";
 import { MobileNewsCard } from "./MobileNewsCard";
 
 interface MobileNewsCarouselProps {

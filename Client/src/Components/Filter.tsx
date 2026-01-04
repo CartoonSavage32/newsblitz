@@ -1,5 +1,5 @@
 import React from "react";
-import { FILTERS } from "../constants/filters";
+import { FILTERS } from "@/constants/filters";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
 interface FilterProps {

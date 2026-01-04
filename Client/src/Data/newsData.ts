@@ -1,7 +1,7 @@
 // src/data/fetchNewsData.ts
 import axios from "axios";
-import { NEWS_DATA_API_URL } from "../lib/apiConfig";
-import type { NewsArticle } from "../shared/schema";
+import { NEWS_DATA_API_URL } from "@/lib/apiConfig";
+import type { NewsArticle } from "@/shared/schema";
 
 // API returns NewsArticle format (already transformed by repository), but dates are serialized as strings
 interface SerializedNewsArticle {

@@ -1,4 +1,4 @@
-import type { NewsArticle } from "../../shared/schema";
+import type { NewsArticle } from "@/shared/schema";
 import { MobileBottomNavbar } from "./MobileBottomNavbar";
 import { MobileFilterSheet } from "./MobileFilterSheet";
 import { MobileNewsCarousel } from "./MobileNewsCarousel";

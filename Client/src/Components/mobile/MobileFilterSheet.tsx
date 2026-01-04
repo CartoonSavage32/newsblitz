@@ -1,5 +1,5 @@
-import { FILTERS } from "../../constants/filters";
-import { cn } from "../../lib/utils";
+import { FILTERS } from "@/constants/filters";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import {
     Sheet,

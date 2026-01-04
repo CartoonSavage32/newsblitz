@@ -2,9 +2,9 @@ import { format } from "date-fns";
 import { Calendar } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { trackGA4Event } from "../../lib/analytics";
-import { generateArticleSlug } from "../../lib/utils/slug";
-import type { NewsArticle } from "../../shared/schema";
+import { trackGA4Event } from "@/lib/analytics";
+import { generateArticleSlug } from "@/lib/utils/slug";
+import type { NewsArticle } from "@/shared/schema";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 

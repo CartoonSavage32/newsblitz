@@ -1,5 +1,5 @@
 // components/desktop/DesktopHome.tsx
-import type { NewsArticle } from "../../shared/schema";
+import type { NewsArticle } from "@/shared/schema";
 import Filter from "../Filter";
 import { NewsCarousel } from "./NewsCarousel";
 
