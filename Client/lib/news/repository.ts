@@ -123,6 +123,26 @@ export async function getArticleById(id: string): Promise<NewsArticle | null> {
 }
 
 /**
+ * Get related articles from the same category (excluding current article)
+ * Used for SEO internal linking
+ */
+export async function getRelatedArticles(category: string, excludeId: string, limit: number = 3): Promise<NewsArticle[]> {
+  const { data, error } = await supabase
+    .from('news_articles')
+    .select('*')
+    .eq('category', category)
+    .neq('id', excludeId)
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map(transformDBArticleToNewsArticle);
+}
+
+/**
  * Get all article IDs for sitemap generation
  */
 export async function getAllArticleIds(): Promise<Array<{ id: string; updated_at: string }>> {

@@ -4,8 +4,8 @@ import Link from 'next/link';
 import Script from 'next/script';
 import { format } from 'date-fns';
 import { Calendar, ArrowLeft } from 'lucide-react';
-import { getArticleById } from '../../../lib/news/repository';
-import { extractIdFromSlug } from '../../../src/lib/utils/slug';
+import { getArticleById, getRelatedArticles } from '../../../lib/news/repository';
+import { extractIdFromSlug, generateArticleSlug } from '../../../src/lib/utils/slug';
 import { Badge } from '../../../src/components/ui/badge';
 import { ReadMoreButton } from '../../../src/components/ReadMoreButton';
 
@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     title: `${seoTitle} | NewsBlitz`,
     description: metaDescription,
     alternates: {
-      canonical: articleUrl, // Canonical to our article page
+      canonical: article.readMoreUrl, // Canonical to original source (SEO best practice for aggregated content)
     },
     openGraph: {
       title: article.title,
@@ -85,6 +85,9 @@ export default async function ArticlePage({ params }: { params: { slug: string }
     notFound();
   }
 
+  // Fetch related articles from same category for SEO internal linking
+  const relatedArticles = await getRelatedArticles(article.category, article.id, 3);
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
   const articleSlug = params.slug;
   const articleUrl = `${siteUrl}/news/${articleSlug}`;
@@ -115,6 +118,40 @@ export default async function ArticlePage({ params }: { params: { slug: string }
       '@id': articleUrl,
     },
     articleSection: article.category,
+    // Canonical link to original source
+    url: article.readMoreUrl,
+  };
+
+  // Breadcrumb structured data for SEO
+  const breadcrumbStructuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: siteUrl,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'News',
+        item: `${siteUrl}/news`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: article.category,
+        item: `${siteUrl}/news?category=${encodeURIComponent(article.category)}`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 4,
+        name: article.title,
+        item: articleUrl,
+      },
+    ],
   };
 
   return (
@@ -124,6 +161,11 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         id="article-structured-data"
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <Script
+        id="breadcrumb-structured-data"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbStructuredData) }}
       />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -243,6 +285,31 @@ export default async function ArticlePage({ params }: { params: { slug: string }
             </p>
           </div>
         </div>
+
+        {/* Related Articles Section - SEO Internal Linking */}
+        {relatedArticles.length > 0 && (
+          <div className="mt-8 pt-8 border-t">
+            <h2 className="text-2xl font-bold mb-4">More {article.category} News</h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              {relatedArticles.map((related) => {
+                const relatedSlug = generateArticleSlug(related.title, related.id);
+                return (
+                  <Link
+                    key={related.id}
+                    href={`/news/${relatedSlug}`}
+                    className="block p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <h3 className="font-semibold mb-2 line-clamp-2">{related.title}</h3>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{related.description}</p>
+                    <time className="text-xs text-muted-foreground mt-2 block">
+                      {format(related.date, 'MMM d, yyyy')}
+                    </time>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Category Link */}
         <div className="mt-8 pt-8 border-t">
