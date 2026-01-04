@@ -1,12 +1,12 @@
 "use client";
 
 // About page redirects to feedback page
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function About() {
   const router = useRouter();
-  
+
   useEffect(() => {
     router.replace("/feedback");
   }, [router]);

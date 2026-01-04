@@ -1,5 +1,5 @@
-import { MetadataRoute } from 'next';
 import { generateArticleSlug } from '@/lib/utils/slug';
+import { MetadataRoute } from 'next';
 import { getAllNews } from '../lib/news/repository';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

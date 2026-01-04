@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // Dummy transaction - just log it
     const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    
+
     console.log('Donation received:', {
       transactionId,
       amount: donationData.amount,

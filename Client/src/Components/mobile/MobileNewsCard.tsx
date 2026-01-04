@@ -1,10 +1,10 @@
 import { format } from "date-fns";
 import { Calendar } from "lucide-react";
 import Link from "next/link";
-import { useRef, useEffect } from "react";
-import type { NewsArticle } from "../../shared/schema";
-import { generateArticleSlug } from "../../lib/utils/slug";
+import { useEffect, useRef } from "react";
 import { trackGA4Event } from "../../lib/analytics";
+import { generateArticleSlug } from "../../lib/utils/slug";
+import type { NewsArticle } from "../../shared/schema";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -102,16 +102,16 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                     </div>
 
                     {/* Content: Title and full description */}
-                    <div 
+                    <div
                         ref={textAreaRef}
                         className="m-2 flex-grow overflow-auto"
-                        style={{ 
+                        style={{
                             touchAction: 'pan-x pan-y',
                             overscrollBehavior: 'contain'
                         }}
                     >
                         <h2 className="text-2xl font-bold text-white leading-tight mb-2">
-                            <Link 
+                            <Link
                                 href={`/news/${generateArticleSlug(article.title, article.id)}`}
                                 className="hover:underline"
                             >
@@ -130,8 +130,8 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                                 View Article
                             </Link>
                         </Button>
-                        <Button 
-                            variant="outline" 
+                        <Button
+                            variant="outline"
                             className="w-full text-white border-white/20 hover:bg-white/10"
                             onClick={() => {
                                 // Track "Read more" click event for GA4

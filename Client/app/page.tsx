@@ -2,9 +2,9 @@
 
 // Donation feature disabled for MVP - CreditCard import commented out
 // import { CreditCard, MessageSquare, Newspaper } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { MessageSquare, Newspaper } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   return (

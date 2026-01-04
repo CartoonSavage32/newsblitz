@@ -22,9 +22,9 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
             rotate: direction === "right" ? -15 : 15,
             scale: 0.9,
         }),
-        animate: { 
-            opacity: 1, 
-            x: 0, 
+        animate: {
+            opacity: 1,
+            x: 0,
             rotate: 0,
             scale: 1,
         },
@@ -37,7 +37,7 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
     };
 
     const handleDragEnd = useCallback(
-        (_event: MouseEvent | TouchEvent, info: any) => {
+        (_event: MouseEvent | TouchEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
             const swipeThreshold = 50; // Reduced threshold for better sensitivity
             const offsetX = info.offset.x;
             const velocityX = info.velocity.x;
@@ -61,10 +61,10 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
         document.body.style.userSelect = 'none';
     }, []);
 
-    const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: any) => {
+    const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
         // Keep preventing interactions during drag
         document.body.style.userSelect = 'none';
-        
+
         // Calculate rotation based on drag offset (Bumble-style)
         const rotation = info.offset.x * 0.1; // Adjust multiplier for desired tilt amount
         setDragRotation(rotation);
@@ -84,9 +84,9 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
     }, [news]);
 
     return (
-        <div 
+        <div
             className={`relative w-full h-full overflow-hidden ${className || ""}`}
-            style={{ 
+            style={{
                 touchAction: 'pan-x',
                 userSelect: 'none'
             }}
@@ -110,7 +110,7 @@ export function MobileNewsCarousel({ news, className }: MobileNewsCarouselProps)
                         handleDragEnd(event, info);
                     }}
                     className="w-full h-full cursor-grab active:cursor-grabbing"
-                    style={{ 
+                    style={{
                         touchAction: 'pan-x',
                         userSelect: 'none',
                         transformOrigin: 'center 85%'

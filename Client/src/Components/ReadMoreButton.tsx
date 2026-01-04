@@ -1,8 +1,8 @@
 "use client";
 
 import { ExternalLink } from 'lucide-react';
-import { trackGA4Event } from '../lib/analytics';
-import { Button } from './ui/button';
+import { trackGA4Event } from '@/lib/analytics';
+import { Button } from '@/components/ui/button';
 
 interface ReadMoreButtonProps {
   url: string;

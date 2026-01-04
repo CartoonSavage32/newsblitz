@@ -1,9 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle, Send, XCircle } from "lucide-react";
-import type React from "react";
-import { useState } from "react";
-import Link from "next/link";
+import { MobileBottomNavbar } from "@/components/mobile/MobileBottomNavbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,9 +8,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { API_BASE_URL } from "@/lib/apiConfig";
-import { MobileBottomNavbar } from "@/components/mobile/MobileBottomNavbar";
 import { useMediaQuery } from "@/hooks/useMobile";
+import { API_BASE_URL } from "@/lib/apiConfig";
+import { ArrowLeft, CheckCircle, Send, XCircle } from "lucide-react";
+import Link from "next/link";
+import type React from "react";
+import { useState } from "react";
 
 export default function Feedback() {
     const [feedbackType, setFeedbackType] = useState("suggestion");
@@ -21,7 +21,7 @@ export default function Feedback() {
     const [rating, setRating] = useState("5");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const isMobile = useMediaQuery("(max-width: 768px)");
-    
+
     // Modal states
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -322,7 +322,7 @@ export default function Feedback() {
                     </div>
                 </div>
             </footer>
-            
+
             {/* Mobile Bottom Navigation */}
             {isMobile && <MobileBottomNavbar />}
         </div>

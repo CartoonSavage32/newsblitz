@@ -1,6 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { Heart, Home, MessageSquare, Newspaper } from "lucide-react";
 import Link from "next/link";
-import { Button } from "../ui/button";
 
 interface MobileBottomNavbarProps {
     disableDonate?: boolean;
@@ -30,9 +30,9 @@ export function MobileBottomNavbar({ disableDonate = true }: MobileBottomNavbarP
                 </Link>
                 {/* Donation feature disabled for MVP */}
                 {disableDonate ? (
-                    <Button 
-                        variant="ghost" 
-                        className="flex flex-col items-center gap-1 opacity-50 cursor-not-allowed" 
+                    <Button
+                        variant="ghost"
+                        className="flex flex-col items-center gap-1 opacity-50 cursor-not-allowed"
                         disabled
                     >
                         <Heart className="h-5 w-5" />

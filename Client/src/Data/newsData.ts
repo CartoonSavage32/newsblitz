@@ -1,7 +1,7 @@
 // src/data/fetchNewsData.ts
 import axios from "axios";
-import type { NewsArticle } from "../shared/schema";
 import { NEWS_DATA_API_URL } from "../lib/apiConfig";
+import type { NewsArticle } from "../shared/schema";
 
 // API returns NewsArticle format (already transformed by repository), but dates are serialized as strings
 interface SerializedNewsArticle {
@@ -29,7 +29,7 @@ export const fetchNewsData = async (): Promise<NewsArticle[]> => {
             items.forEach((item: SerializedNewsArticle) => {
                 // Parse date string back to Date object
                 const articleDate = item.date ? new Date(item.date) : new Date();
-                
+
                 articles.push({
                     id: item.id, // Unique database ID for React keys
                     news_number: item.news_number || 0,

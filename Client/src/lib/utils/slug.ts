@@ -12,10 +12,10 @@ export function generateArticleSlug(title: string, id: string): string {
     .replace(/\s+/g, '-') // Replace spaces with hyphens
     .replace(/-+/g, '-') // Replace multiple hyphens with single
     .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-  
+
   // Use first 8 chars of ID for uniqueness
   const idShort = id.substring(0, 8);
-  
+
   // Combine: title-slug-id
   return `${titleSlug}-${idShort}`;
 }
@@ -27,7 +27,7 @@ export function generateArticleSlug(title: string, id: string): string {
 export function extractIdFromSlug(slug: string): string | null {
   const parts = slug.split('-');
   if (parts.length < 2) return null;
-  
+
   // Last part should be the ID
   const idPart = parts[parts.length - 1];
   return idPart.length === 8 ? idPart : null;

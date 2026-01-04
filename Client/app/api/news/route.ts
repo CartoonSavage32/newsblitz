@@ -4,11 +4,11 @@ import { getAllNews } from '../../../lib/news/repository';
 export async function GET() {
   try {
     const news = await getAllNews();
-    
+
     // Transform to match frontend expectations (grouped by category)
     // Frontend expects: { category: Article[] }
     const groupedNews: Record<string, typeof news> = {};
-    
+
     for (const article of news) {
       const category = article.category || 'All';
       if (!groupedNews[category]) {

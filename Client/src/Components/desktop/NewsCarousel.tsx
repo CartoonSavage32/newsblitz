@@ -3,9 +3,9 @@ import useEmblaCarousel from "embla-carousel-react"
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import type { NewsArticle } from "../../shared/schema"
-import { generateArticleSlug } from "../../lib/utils/slug"
 import { trackGA4Event } from "../../lib/analytics"
+import { generateArticleSlug } from "../../lib/utils/slug"
+import type { NewsArticle } from "../../shared/schema"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 
@@ -110,7 +110,7 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
 
                   {/* Title and description */}
                   <h2 className="text-2xl md:text-4xl font-bold mb-2">
-                    <Link 
+                    <Link
                       href={`/news/${generateArticleSlug(article.title, article.id)}`}
                       className="hover:underline"
                     >
