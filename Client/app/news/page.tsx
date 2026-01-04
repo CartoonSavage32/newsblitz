@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DesktopHome } from "../../src/components/desktop/DesktopHome";
-import { MobileHome } from "../../src/components/mobile/MobileHome";
-import { useMediaQuery } from "../../src/hooks/useMobile";
-import { useNews } from "../../src/hooks/useNews";
-import type { NewsArticle } from "../../src/shared/schema";
+import { DesktopHome } from "@/components/desktop/DesktopHome";
+import { MobileHome } from "@/components/mobile/MobileHome";
+import { useMediaQuery } from "@/hooks/useMobile";
+import { useNews } from "@/hooks/useNews";
+import type { NewsArticle } from "@/shared/schema";
 
 export default function News() {
   const isMobile = useMediaQuery("(max-width: 768px)");

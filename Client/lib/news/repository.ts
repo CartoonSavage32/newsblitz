@@ -1,5 +1,5 @@
 import { supabase } from '../supabase/client';
-import type { NewsArticle } from '../../src/shared/schema';
+import type { NewsArticle } from '@/shared/schema';
 
 // Database article type (matches Supabase schema)
 type DBArticle = {

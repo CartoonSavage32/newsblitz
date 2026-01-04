@@ -5,9 +5,9 @@ import Script from 'next/script';
 import { format } from 'date-fns';
 import { Calendar, ArrowLeft } from 'lucide-react';
 import { getArticleById, getRelatedArticles } from '../../../lib/news/repository';
-import { extractIdFromSlug, generateArticleSlug } from '../../../src/lib/utils/slug';
-import { Badge } from '../../../src/components/ui/badge';
-import { ReadMoreButton } from '../../../src/components/ReadMoreButton';
+import { extractIdFromSlug, generateArticleSlug } from '@/lib/utils/slug';
+import { Badge } from '@/components/ui/badge';
+import { ReadMoreButton } from '@/components/ReadMoreButton';
 
 // Generate metadata for SEO
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {

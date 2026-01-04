@@ -3,11 +3,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import Script from "next/script";
-import { queryClient } from "../src/lib/queryClient";
-import { DesktopNavbar } from "../src/components/navbar";
-import { GA4Tracker } from "../src/components/GA4Tracker";
-import { useMediaQuery } from "../src/hooks/useMobile";
-import "../src/index.css";
+import { queryClient } from "@/lib/queryClient";
+import { DesktopNavbar } from "@/components/navbar";
+import { GA4Tracker } from "@/components/GA4Tracker";
+import { useMediaQuery } from "@/hooks/useMobile";
+import "@/index.css";
 
 // Note: Metadata is exported from layout-seo.tsx (server component pattern)
 // This layout is a client component due to hooks usage

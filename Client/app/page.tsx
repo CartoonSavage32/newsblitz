@@ -4,7 +4,7 @@
 // import { CreditCard, MessageSquare, Newspaper } from "lucide-react";
 import { MessageSquare, Newspaper } from "lucide-react";
 import Link from "next/link";
-import { Button } from "../src/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   return (
