@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import Script from 'next/script';
 import { format } from 'date-fns';
 import { Calendar, ArrowLeft } from 'lucide-react';
 import { getArticleById } from '../../../lib/news/repository';

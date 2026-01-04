@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from 'lucide-react';
+import { trackGA4Event } from '../lib/analytics';
 import { Button } from './ui/button';
 
 interface ReadMoreButtonProps {
@@ -12,13 +13,11 @@ interface ReadMoreButtonProps {
 export function ReadMoreButton({ url, articleId, articleTitle }: ReadMoreButtonProps) {
   const handleClick = () => {
     // Track "Read more" click event for GA4
-    if (typeof window !== 'undefined' && window.gtag) {
-      window.gtag('event', 'read_more_click', {
-        article_id: articleId,
-        article_title: articleTitle,
-        source_url: url,
-      });
-    }
+    trackGA4Event('read_more_click', {
+      article_id: articleId,
+      article_title: articleTitle,
+      source_url: url,
+    });
   };
 
   return (

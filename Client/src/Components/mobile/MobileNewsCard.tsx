@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useEffect } from "react";
 import type { NewsArticle } from "../../shared/schema";
 import { generateArticleSlug } from "../../lib/utils/slug";
+import { trackGA4Event } from "../../lib/analytics";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 
@@ -134,13 +135,11 @@ export function MobileNewsCard({ article }: { article: NewsArticle }) {
                             className="w-full text-white border-white/20 hover:bg-white/10"
                             onClick={() => {
                                 // Track "Read more" click event for GA4
-                                if (typeof window !== 'undefined' && window.gtag) {
-                                    window.gtag('event', 'read_more_click', {
-                                        article_id: article.id,
-                                        article_title: article.title,
-                                        source_url: article.readMoreUrl,
-                                    });
-                                }
+                                trackGA4Event('read_more_click', {
+                                    article_id: article.id,
+                                    article_title: article.title,
+                                    source_url: article.readMoreUrl,
+                                });
                                 window.open(article.readMoreUrl, "_blank", "noopener,noreferrer");
                             }}
                         >

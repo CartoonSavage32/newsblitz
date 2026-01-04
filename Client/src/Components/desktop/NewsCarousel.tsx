@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import type { NewsArticle } from "../../shared/schema"
 import { generateArticleSlug } from "../../lib/utils/slug"
+import { trackGA4Event } from "../../lib/analytics"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 
@@ -136,13 +137,11 @@ export function NewsCarousel({ articles }: NewsCarouselProps) {
                       className="text-primary-foreground border-primary-foreground/20"
                       onClick={() => {
                         // Track "Read more" click event for GA4
-                        if (typeof window !== 'undefined' && window.gtag) {
-                          window.gtag('event', 'read_more_click', {
-                            article_id: article.id,
-                            article_title: article.title,
-                            source_url: article.readMoreUrl,
-                          });
-                        }
+                        trackGA4Event('read_more_click', {
+                          article_id: article.id,
+                          article_title: article.title,
+                          source_url: article.readMoreUrl,
+                        });
                         const newWindow = window.open(article.readMoreUrl, "_blank", "noopener,noreferrer")
                         if (newWindow) newWindow.opener = null
                       }}

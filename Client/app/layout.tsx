@@ -9,6 +9,9 @@ import { GA4Tracker } from "../src/components/GA4Tracker";
 import { useMediaQuery } from "../src/hooks/useMobile";
 import "../src/index.css";
 
+// Note: Metadata is exported from layout-seo.tsx (server component pattern)
+// This layout is a client component due to hooks usage
+
 export default function RootLayout({
     children,
 }: {
@@ -16,7 +19,7 @@ export default function RootLayout({
 }) {
     const [mounted, setMounted] = useState(false);
     const isMobile = useMediaQuery("(max-width: 768px)");
-    const ga4Id = process.env.NEXT_PUBLIC_GA4_ID;
+    const ga4Id = process.env.NEXT_PUBLIC_GA4_ID || process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID;
 
     // Initialize theme on mount
     useEffect(() => {
@@ -35,7 +38,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <head>
-                {/* GA4 Analytics */}
+                {/* GA4 Analytics - Scripts loaded via Next.js Script component */}
                 {ga4Id && (
                     <>
                         <Script
