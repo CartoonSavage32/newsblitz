@@ -21,7 +21,7 @@ A modern Next.js news aggregation application with AI-powered summaries, built w
 - 🎨 **Dark Mode**: Built-in theme switching
 - 🔍 **SEO Optimized**: Dynamic article pages, sitemap, structured data
 - 📧 **Feedback Form**: Contact form with email delivery
-- 🎯 **Category Filtering**: Filter news by category with instant updates
+- 🎯 **Category Filtering**: Filter news by category with instant updates.
 
 ## Getting Started
 
