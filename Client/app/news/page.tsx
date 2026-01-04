@@ -1,10 +1,10 @@
 "use client";
 
-import { DesktopHome } from "@/components/desktop/DesktopHome";
-import { MobileHome } from "@/components/mobile/MobileHome";
+import { DesktopHome } from "@/components/news/DesktopHome";
+import { MobileHome } from "@/components/news/MobileHome";
 import { useMediaQuery } from "@/hooks/useMobile";
 import { useNews } from "@/hooks/useNews";
-import type { NewsArticle } from "@/shared/schema";
+import type { NewsArticle } from "@/lib/schema";
 import { useMemo, useState } from "react";
 
 export default function News() {

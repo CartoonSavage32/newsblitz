@@ -1,4 +1,4 @@
-import { ReadMoreButton } from '@/components/ReadMoreButton';
+import { ReadMoreButton } from '@/components/news/ReadMoreButton';
 import { Badge } from '@/components/ui/badge';
 import { extractIdFromSlug, generateArticleSlug } from '@/lib/utils/slug';
 import { format } from 'date-fns';
@@ -239,7 +239,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
             </div>
 
             <div className="text-lg leading-relaxed">
-              {article.description.split('\n').map((paragraph, index) => (
+              {article.description.split('\n').map((paragraph: string, index: number) => (
                 <p key={index} className="mb-4">
                   {paragraph}
                 </p>

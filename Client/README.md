@@ -72,7 +72,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 Client/
-├── app/                    # Next.js App Router pages
+├── app/                    # Next.js App Router (routes, layouts, pages)
 │   ├── api/               # API routes
 │   │   ├── feedback/     # Feedback form endpoint
 │   │   ├── health/        # Health check
@@ -85,21 +85,61 @@ Client/
 │   ├── page.tsx           # Homepage
 │   ├── robots.ts          # Robots.txt generator
 │   └── sitemap.ts         # Sitemap generator
-├── lib/                   # Server-side utilities
-│   ├── news/              # News repository (Supabase)
-│   └── supabase/          # Supabase client
-├── src/
-│   ├── components/        # React components
-│   │   ├── desktop/       # Desktop-specific components
-│   │   ├── mobile/        # Mobile-specific components
-│   │   └── ui/            # Reusable UI components
-│   ├── hooks/             # Custom React hooks
-│   ├── Data/              # Data fetching logic
-│   ├── lib/               # Client utilities
-│   └── shared/            # Shared TypeScript types
-└── supabase/
-    └── migrations/        # Database migrations
+│
+├── components/             # All React components
+│   ├── ui/                 # Reusable UI components (buttons, cards, etc.)
+│   ├── layout/             # Navbar, footer, wrappers
+│   ├── news/               # News-specific components
+│   └── shared/             # Cross-feature reusable components
+│
+├── hooks/                  # All custom React hooks
+│
+├── lib/                    # Business logic & integrations
+│   ├── api.ts              # API base URLs and helpers
+│   ├── supabase.ts         # Supabase client
+│   ├── analytics.ts        # GA / tracking helpers
+│   ├── utils.ts            # Generic helpers
+│   ├── news/               # News repository (Supabase)
+│   └── supabase/           # Supabase client
+│
+├── data/                   # Static or mock data
+│
+├── styles/                 # Global styles
+│   └── globals.css
+│
+├── public/                 # Static assets
+│
+├── middleware.ts
+├── next.config.js
+├── tsconfig.json
+├── package.json
+└── README.md
 ```
+
+### Where to Add New Code
+
+- **New Components**: Add to `components/` organized by purpose:
+  - `components/ui/` - Reusable UI primitives (buttons, inputs, etc.)
+  - `components/layout/` - Layout components (navbar, footer)
+  - `components/news/` - News-specific components
+  - `components/shared/` - Cross-feature components
+
+- **New Hooks**: Add to `hooks/` directory (e.g., `hooks/useCustomHook.ts`)
+
+- **New API Logic**: Add to `lib/` directory:
+  - `lib/api.ts` - API configuration
+  - `lib/analytics.ts` - Tracking utilities
+  - `lib/utils.ts` - Generic utilities
+
+- **New Data Fetching**: Add to `data/` directory or create hooks in `hooks/`
+
+### Data Flow
+
+1. **Database → API**: Articles are fetched from Supabase via `/api/news`
+2. **API → Hooks**: Data is fetched using React Query hooks (e.g., `useNews()`)
+3. **Hooks → Components**: Components consume data from hooks
+4. **Components → UI**: Components render articles with proper linking
+5. **SEO**: Article pages are server-rendered for optimal search engine indexing
 
 ## Available Scripts
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { GA4Tracker } from "@/components/GA4Tracker";
-import { DesktopNavbar } from "@/components/navbar";
+import { GA4Tracker } from "@/components/shared/GA4Tracker";
+import { DesktopNavbar } from "@/components/layout/navbar";
 import { useMediaQuery } from "@/hooks/useMobile";
-import "@/index.css";
+import "@/styles/globals.css";
 import { queryClient } from "@/lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import Script from "next/script";
