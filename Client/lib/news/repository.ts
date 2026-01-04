@@ -1,4 +1,4 @@
-import type { NewsArticle } from '@/shared/schema';
+import type { NewsArticle } from '@/lib/schema';
 import { supabase } from '../supabase/client';
 
 // Database article type (matches Supabase schema)
