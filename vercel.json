@@ -1,6 +1,4 @@
 {
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "rootDirectory": "Client"
+  "buildCommand": "cd Client && npm run build",
+  "installCommand": "cd Client && npm install"
 }
-
