@@ -1,4 +1,0 @@
-{
-  "buildCommand": "cd Client && npm run build",
-  "installCommand": "cd Client && npm install"
-}
