@@ -9,6 +9,7 @@ import feedparser
 import newspaper.settings
 import nltk
 import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from newspaper import Article
 from supabase import Client, create_client
@@ -88,6 +89,102 @@ def delete_old_articles():
     except Exception as e:
         print(f"Error deleting old articles: {e}")
         return 0
+
+
+def extract_image_from_article(url):
+    """
+    Extract article image from metadata tags with priority:
+    1. <meta property="og:image">
+    2. <meta name="twitter:image">
+    3. Newspaper3k article.top_image
+    4. Fallback placeholder image
+
+    Rejects images that:
+    - End with .ico
+    - Are tracking pixels (1x1, very small)
+    - Are smaller than 300x300 (if size detectable)
+    """
+    FALLBACK_IMAGE = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
+
+    def is_valid_image(img_url):
+        """Validate image URL - reject .ico, tracking pixels, and small images."""
+        if not img_url:
+            return False
+
+        # Reject .ico files
+        if img_url.lower().endswith(".ico"):
+            return False
+
+        # Reject common tracking pixel patterns
+        tracking_patterns = ["1x1", "pixel", "tracking", "beacon", "analytics"]
+        img_lower = img_url.lower()
+        if any(pattern in img_lower for pattern in tracking_patterns):
+            return False
+
+        # Try to check image size if URL contains dimensions
+        # Some CDNs include size in URL (e.g., image.jpg?w=100&h=100)
+        size_match = re.search(r"[?&](?:w|width|h|height)=(\d+)", img_url)
+        if size_match:
+            size = int(size_match.group(1))
+            if size < 300:
+                return False
+
+        return True
+
+    # Priority 1: Try og:image meta tag
+    try:
+        response = requests.get(
+            url,
+            timeout=10,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            },
+        )
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        # Check og:image
+        og_image = soup.find("meta", property="og:image")
+        if og_image and og_image.get("content"):
+            img_url = og_image["content"]
+            # Handle relative URLs
+            if img_url.startswith("//"):
+                img_url = "https:" + img_url
+            elif img_url.startswith("/"):
+                parsed = urlparse(url)
+                img_url = f"{parsed.scheme}://{parsed.netloc}{img_url}"
+
+            if is_valid_image(img_url):
+                return img_url
+
+        # Priority 2: Try twitter:image
+        twitter_image = soup.find("meta", attrs={"name": "twitter:image"})
+        if twitter_image and twitter_image.get("content"):
+            img_url = twitter_image["content"]
+            # Handle relative URLs
+            if img_url.startswith("//"):
+                img_url = "https:" + img_url
+            elif img_url.startswith("/"):
+                parsed = urlparse(url)
+                img_url = f"{parsed.scheme}://{parsed.netloc}{img_url}"
+
+            if is_valid_image(img_url):
+                return img_url
+    except Exception:
+        pass  # Fall through to Newspaper3k
+
+    # Priority 3: Try Newspaper3k
+    try:
+        article = Article(url)
+        article.download()
+        article.parse()
+        if article.top_image and is_valid_image(article.top_image):
+            return article.top_image
+    except Exception:
+        pass  # Fall through to fallback
+
+    # Priority 4: Fallback placeholder
+    return FALLBACK_IMAGE
 
 
 def resolve_google_news_url(google_url):
@@ -257,10 +354,8 @@ def get_news_data():
                 )
                 continue
 
-            # Handle image replacement for .ico files
-            if article_image and (article_image.find(".ico") != -1):
-                print("replaced_image_url :" + article_image)
-                article_image = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
+            # Image validation is already handled in extract_image_from_article()
+            # No need for additional .ico check here
 
             # Use published_date from RSS if available, otherwise use extracted date
             final_date = None
@@ -300,7 +395,11 @@ def extract_article_content(url, snippet, title, source):
     1. Primary: Newspaper3k download + parse
     2. Secondary: Try reader-mode URLs
     3. Final: Use Google News RSS snippet
+
+    Images are extracted separately using extract_image_from_article().
     """
+    article_image = None
+
     # PRIMARY: Try Newspaper3k normally
     try:
         article = Article(url)
@@ -308,11 +407,14 @@ def extract_article_content(url, snippet, title, source):
         article.parse()
 
         if article.text and len(article.text) >= 150:
+            # Extract image using priority-based method
+            article_image = extract_image_from_article(url)
+
             return (
                 article.text,
                 article.title or title,
                 article.url or url,
-                article.top_image,
+                article_image,
                 article.publish_date.isoformat() if article.publish_date else None,
                 urlparse(article.url or url).netloc.replace("www.", "").split(".")[0],
             )
@@ -332,11 +434,14 @@ def extract_article_content(url, snippet, title, source):
             article.parse()
 
             if article.text and len(article.text) >= 150:
+                # Extract image using priority-based method (use original URL, not reader URL)
+                article_image = extract_image_from_article(url)
+
                 return (
                     article.text,
                     article.title or title,
                     url,  # Keep original URL
-                    article.top_image,
+                    article_image,
                     article.publish_date.isoformat() if article.publish_date else None,
                     urlparse(url).netloc.replace("www.", "").split(".")[0],
                 )
@@ -355,11 +460,14 @@ def extract_article_content(url, snippet, title, source):
     except Exception:
         publisher = source or "Unknown"
 
+    # Try to extract image even for fallback content
+    article_image = extract_image_from_article(url)
+
     return (
         fallback_content,
         title,
         url,
-        None,  # No image available from snippet
+        article_image,  # Use extracted image or fallback placeholder
         None,  # No date available from snippet
         publisher,
     )
