@@ -1,0 +1,92 @@
+# GitHub Actions Workflow for NewsBlitz Python Ingestion
+#
+# FREE TIER COMPLIANCE:
+# - Public repos: Unlimited minutes (this workflow is free)
+# - Private repos: 2,000 minutes/month free
+#   - This workflow runs 8x/day (every 3 hours) = 240 runs/month
+#   - Estimated 5-8 minutes per run = 1,200-1,920 minutes/month
+#   - Stays well within the 2,000 minute free limit
+#
+# COST AVOIDANCE:
+# - Uses ubuntu-latest (free standard runner)
+# - No large runners (paid feature)
+# - No artifact storage (minimal logs only)
+# - No matrix builds or parallel jobs
+# - Single job, single runner = minimal minutes usage
+
+name: News Ingestion
+
+on:
+  # Scheduled: Every 3 hours
+  schedule:
+    - cron: '0 */3 * * *'  # UTC time: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00
+  
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    name: Run News Ingestion
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./NewsData
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'  # Cache pip packages to reduce install time (free feature)
+
+      - name: Install system dependencies for Selenium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            chromium-browser \
+            chromium-chromedriver \
+            xvfb
+
+      - name: Install Python dependencies
+        working-directory: ./NewsData
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ingestion script
+        working-directory: ./NewsData
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          # Chrome/Chromium configuration for CI
+          CHROME_BIN: /usr/bin/chromium-browser
+          CHROMEDRIVER_PATH: /usr/bin/chromedriver
+          # Virtual display for headless mode
+          DISPLAY: :99
+        run: |
+          # Start virtual display for headless Chrome (required even with --headless)
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          sleep 2
+          
+          # Verify Chrome and ChromeDriver are available
+          chromium-browser --version || echo "Warning: Chromium version check failed"
+          chromedriver --version || echo "Warning: ChromeDriver version check failed"
+          
+          # Run ingestion with error handling
+          # Script will fail fast if secrets are missing or API calls fail
+          python ingest.py
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          echo "Ingestion failed. Check logs above for details."
+          # Kill any remaining Chrome processes
+          pkill -f chromium || true
+          pkill -f Xvfb || true
+
