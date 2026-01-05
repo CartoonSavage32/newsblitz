@@ -114,7 +114,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
       name: 'NewsBlitz',
       logo: {
         '@type': 'ImageObject',
-        url: `${siteUrl}/logo.png`,
+        url: `${siteUrl}/favicon-192x192.png`,
       },
     },
     mainEntityOfPage: {

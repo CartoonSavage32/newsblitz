@@ -1,0 +1,17 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 42 34"
+  fill="none"
+>
+  <!-- Left diamond -->
+  <polygon
+    points="17 0 34 17 17 34 0 17"
+    fill="rgb(250, 204, 21)"
+  />
+
+  <!-- Right diamond (8px shift) -->
+  <polygon
+    points="25 0 42 17 25 34 8 17"
+    fill="rgb(231, 176, 8)"
+  />
+</svg>

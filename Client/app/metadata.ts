@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
 const siteName = 'NewsBlitz';
-const defaultDescription = 'Stay informed with instant news summaries. Get the latest headlines from AI, Health, Sports, Finance, Geopolitical, and Crypto news - all in one place.';
+const defaultDescription = 'Stay informed with instant news summaries. Get the latest headlines from AI, Health, Sports, Finance, Geopolitical, and Crypto news - all in one place';
 
 /**
  * Default metadata for the site
@@ -24,6 +24,15 @@ export const defaultMetadata: Metadata = {
     address: false,
     telephone: false,
   },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/manifest.json',
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -61,4 +70,3 @@ export const defaultMetadata: Metadata = {
     google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION,
   },
 };
-
