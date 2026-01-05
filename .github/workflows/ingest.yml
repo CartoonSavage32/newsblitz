@@ -22,19 +22,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
           cache: 'pip'  # Cache pip packages to reduce install time (free feature)
-
-      - name: Install system dependencies for Selenium
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            chromium-browser \
-            chromium-chromedriver \
-            xvfb
 
       - name: Install Python dependencies
         working-directory: ./NewsData
@@ -49,29 +41,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SITE_URL: ${{ secrets.SITE_URL }}
-          # Chrome/Chromium configuration for CI
-          CHROME_BIN: /usr/bin/chromium-browser
-          CHROMEDRIVER_PATH: /usr/bin/chromedriver
-          # Virtual display for headless mode
-          DISPLAY: :99
         run: |
-          # Start virtual display for headless Chrome (required even with --headless)
-          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          sleep 2
-          
-          # Verify Chrome and ChromeDriver are available
-          chromium-browser --version || echo "Warning: Chromium version check failed"
-          chromedriver --version || echo "Warning: ChromeDriver version check failed"
-          
           # Run ingestion with error handling
           # Script will fail fast if secrets are missing or API calls fail
           python ingest.py
-
-      - name: Cleanup on failure
-        if: failure()
-        run: |
-          echo "Ingestion failed. Check logs above for details."
-          # Kill any remaining Chrome processes
-          pkill -f chromium || true
-          pkill -f Xvfb || true
 

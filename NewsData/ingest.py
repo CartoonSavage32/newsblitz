@@ -5,16 +5,12 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
+import feedparser
 import newspaper.settings
 import nltk
 import requests
 from dotenv import load_dotenv
 from newspaper import Article
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 from supabase import Client, create_client
 
 # Load environment variables from .env file
@@ -40,35 +36,19 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-today = datetime.today()
-yesterday = today - timedelta(days=1)
-yesterday = yesterday.date()
-# Global English-only news URLs with hl=en (language), gl=US (region), ceid=US:en (country/language)
-topics = {
-    "AI": f"https://www.google.com/search?q=AI+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-    "Health": f"https://www.google.com/search?q=health+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-    "Sports": f"https://www.google.com/search?q=sports+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-    "Finance": f"https://www.google.com/search?q=finance+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-    "Geopolitical": f"https://www.google.com/search?q=geopolitical+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-    "Crypto": f"https://www.google.com/search?q=crypto+news+after:{yesterday}&tbm=nws&hl=en&gl=US&ceid=US:en",
-}
-
-chrome_options = Options()
-chrome_options.add_argument("--headless=new")  # Use new headless mode
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-chrome_options.add_experimental_option("useAutomationExtension", False)
-# Updated user agent to recent Chrome version
-chrome_options.add_argument(
-    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
-
 start_time = time.time()
 news_failed_to_scrape_count = 0
+
+# Google News RSS feed URLs - English, US region, top 10 articles per category
+# Format: https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en&num=10
+topics = {
+    "AI": "https://news.google.com/rss/search?q=AI+news&hl=en-US&gl=US&ceid=US:en&num=10",
+    "Health": "https://news.google.com/rss/search?q=health+news&hl=en-US&gl=US&ceid=US:en&num=10",
+    "Sports": "https://news.google.com/rss/search?q=sports+news&hl=en-US&gl=US&ceid=US:en&num=10",
+    "Finance": "https://news.google.com/rss/search?q=finance+news&hl=en-US&gl=US&ceid=US:en&num=10",
+    "Geopolitical": "https://news.google.com/rss/search?q=geopolitical+news&hl=en-US&gl=US&ceid=US:en&num=10",
+    "Crypto": "https://news.google.com/rss/search?q=crypto+news&hl=en-US&gl=US&ceid=US:en&num=10",
+}
 
 
 def delete_old_articles():
@@ -110,245 +90,119 @@ def delete_old_articles():
         return 0
 
 
+def resolve_google_news_url(google_url):
+    """
+    Resolve Google News redirect URL to actual article URL.
+    Google News RSS feeds return redirect URLs that need to be resolved.
+    """
+    try:
+        # Follow redirects to get actual URL
+        response = requests.head(google_url, allow_redirects=True, timeout=10)
+        actual_url = response.url
+        return actual_url
+    except Exception:
+        # If HEAD fails, try GET with no redirect following to extract URL
+        try:
+            response = requests.get(google_url, allow_redirects=False, timeout=10)
+            if response.status_code in [301, 302, 303, 307, 308]:
+                location = response.headers.get("Location", "")
+                if location:
+                    return location
+        except Exception:
+            pass
+    # If all else fails, return original URL
+    return google_url
+
+
 def get_news_data():
+    """
+    Fetch news articles from Google News RSS feeds.
+    Returns dictionary with category as key and list of articles as value.
+    """
     # Clean up old articles before scraping new ones (18-hour retention)
     delete_old_articles()
 
-    driver = webdriver.Chrome(options=chrome_options)
+    all_news_data = {}
 
-    # Execute script to hide webdriver property
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-            "source": """
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            })
-        """
-        },
-    )
-
-    def get_news_url(topic_url):
+    for topic, rss_url in topics.items():
+        print(f"Fetching {topic} news from RSS feed...")
         try:
-            driver.get(topic_url)
-            # Wait a bit for page to load
-            time.sleep(2)
+            # Parse RSS feed
+            feed = feedparser.parse(rss_url)
 
-            # Try to handle cookie consent if present
-            try:
-                # Common cookie consent button selectors
-                cookie_selectors = [
-                    "button#L2AGLb",  # Google "I agree" button
-                    "button[aria-label*='Accept']",
-                    "button[aria-label*='I agree']",
-                    "button:contains('Accept')",
-                ]
-                for selector in cookie_selectors:
-                    try:
-                        cookie_button = WebDriverWait(driver, 2).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                        )
-                        cookie_button.click()
-                        time.sleep(1)
-                        break
-                    except Exception:
-                        continue
-            except Exception:
-                pass  # No cookie consent found, continue
+            if feed.bozo and feed.bozo_exception:
+                print(f"Error parsing RSS feed for {topic}: {feed.bozo_exception}")
+                all_news_data[topic] = []
+                continue
 
             news_results = []
-            max_articles = (
-                10  # Increased to 10 articles per category for better coverage
-            )
-            max_pages = 3  # Limit number of pages to scrape to avoid infinite loops
+            max_articles = 10
 
-            # Wait for news results with longer timeout
-            try:
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_all_elements_located(
-                        (By.CSS_SELECTOR, "div.SoaBEf, div[data-ved]")
-                    )
-                )
-            except Exception:
-                # Try alternative selectors
+            # Extract articles from RSS feed
+            for entry in feed.entries[:max_articles]:
                 try:
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.g"))
-                    )
-                except Exception:
-                    print(f"Error loading page with URL: {topic_url}")
-                    # Print page source snippet for debugging
-                    page_source_preview = (
-                        driver.page_source[:500]
-                        if driver.page_source
-                        else "No page source"
-                    )
-                    print(f"Page source preview: {page_source_preview}")
-                    return []
-        except Exception as e:
-            print(f"Error loading page with URL: {topic_url} due to {e}")
-            return []
-
-        page_count = 0
-        while len(news_results) < max_articles and page_count < max_pages:
-            # Try multiple selectors for Google News results
-            elements = driver.find_elements(By.CSS_SELECTOR, "div.SoaBEf")
-            if not elements:
-                # Try alternative selector
-                elements = driver.find_elements(By.CSS_SELECTOR, "div[data-ved]")
-            if not elements:
-                # Try generic result selector
-                elements = driver.find_elements(By.CSS_SELECTOR, "div.g")
-
-            for el in elements:
-                try:
-                    # Try to find date element with multiple selectors
-                    date_element = None
-                    date_selectors = [
-                        ".LfVVr",
-                        ".OSrXXb",
-                        ".fG8Fp",
-                        "span[style*='color']",
-                    ]
-                    for selector in date_selectors:
-                        try:
-                            date_element = el.find_element(By.CSS_SELECTOR, selector)
-                            break
-                        except Exception:
-                            continue
-
-                    if not date_element:
+                    # Extract link - Google News RSS links are redirect URLs, extract actual URL
+                    link = entry.get("link", "")
+                    if not link:
                         continue
 
-                    news_date_str = date_element.text
+                    # Extract title
+                    title = entry.get("title", "").strip()
+                    if not title or len(title) < 10:
+                        continue
 
-                    if (
-                        "hours" in news_date_str.lower()
-                        or "minutes" in news_date_str.lower()
-                        or "hour" in news_date_str.lower()
-                        or "minute" in news_date_str.lower()
-                    ):
-                        # Try to find link
-                        link = None
+                    # Extract snippet/description
+                    snippet = ""
+                    if hasattr(entry, "summary"):
+                        snippet = entry.get("summary", "").strip()
+                    elif hasattr(entry, "description"):
+                        snippet = entry.get("description", "").strip()
+
+                    # Extract source/publisher
+                    source = ""
+                    if hasattr(entry, "source"):
+                        source = entry.get("source", {}).get("title", "").strip()
+                    elif hasattr(entry, "author"):
+                        source = entry.get("author", "").strip()
+
+                    # Extract published date
+                    published_date = None
+                    if hasattr(entry, "published_parsed") and entry.published_parsed:
                         try:
-                            link = el.find_element(By.TAG_NAME, "a").get_attribute(
-                                "href"
-                            )
+                            published_date = datetime(*entry.published_parsed[:6])
+                            published_date = published_date.isoformat()
                         except Exception:
-                            # Try alternative link selectors
-                            try:
-                                link = el.find_element(
-                                    By.CSS_SELECTOR, "a[href]"
-                                ).get_attribute("href")
-                            except Exception:
-                                continue
+                            pass
 
-                        if not link or link.startswith("javascript:"):
-                            continue
+                    # Extract date string for display
+                    date_str = ""
+                    if hasattr(entry, "published"):
+                        date_str = entry.get("published", "")
 
-                        if link not in [
-                            n["link"] for n in news_results
-                        ]:  # Avoid duplicates
-                            # Try to find title
-                            title = ""
-                            title_selectors = ["div.MBeuO", "h3", "a h3", ".DKV0Md"]
-                            for selector in title_selectors:
-                                try:
-                                    title = el.find_element(
-                                        By.CSS_SELECTOR, selector
-                                    ).text
-                                    break
-                                except Exception:
-                                    continue
+                    # Quality filter: skip very short titles or snippets
+                    if len(snippet.strip()) < 20:
+                        continue
 
-                            # Try to find snippet
-                            snippet = ""
-                            snippet_selectors = [".GI74Re", ".Y3v8qd", ".s3v9rd"]
-                            for selector in snippet_selectors:
-                                try:
-                                    snippet = el.find_element(
-                                        By.CSS_SELECTOR, selector
-                                    ).text
-                                    break
-                                except Exception:
-                                    continue
-
-                            # Try to find source
-                            source = ""
-                            source_selectors = [".NUnG9d span", ".NUnG9d", ".wEwyrc"]
-                            for selector in source_selectors:
-                                try:
-                                    source = el.find_element(
-                                        By.CSS_SELECTOR, selector
-                                    ).text
-                                    break
-                                except Exception:
-                                    continue
-
-                            # Light quality filter: skip very short titles or snippets
-                            # Google ranking is the primary quality signal, this just filters obvious low-quality
-                            if (
-                                title
-                                and len(title.strip()) >= 10
-                                and len(snippet.strip()) >= 20
-                            ):
-                                news_results.append(
-                                    {
-                                        "link": link,
-                                        "title": title,
-                                        "snippet": snippet,
-                                        "date": news_date_str,
-                                        "source": source,
-                                    }
-                                )
-                    if len(news_results) >= max_articles:
-                        return news_results[:max_articles]
-
-                except Exception:
-                    # Silently continue - some elements might not match our selectors
+                    news_results.append(
+                        {
+                            "link": link,
+                            "title": title,
+                            "snippet": snippet,
+                            "date": date_str,
+                            "source": source,
+                            "published_date": published_date,
+                        }
+                    )
+                except Exception as e:
+                    print(f"Error processing RSS entry for {topic}: {e}")
                     continue
 
-            # Try to find and click the "Next" button
-            try:
-                # Scroll to bottom to ensure next button is visible
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(1)
+            all_news_data[topic] = news_results[:max_articles]
+            print(f"Fetched {len(news_results)} articles for {topic}")
 
-                # Try multiple selectors for next button
-                next_button = None
-                next_selectors = [
-                    "a#pnnext",
-                    "a[aria-label='Next']",
-                    "a[aria-label='Next page']",
-                    "td.b a[href*='start=']",
-                ]
-                for selector in next_selectors:
-                    try:
-                        next_button = driver.find_element(By.CSS_SELECTOR, selector)
-                        break
-                    except Exception:
-                        continue
-
-                if next_button:
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", next_button
-                    )
-                    time.sleep(1)
-                    driver.execute_script("arguments[0].click();", next_button)
-                    time.sleep(3)  # Wait for next page to load
-                    page_count += 1
-                else:
-                    print("No more pages or 'Next' button not found.")
-                    break
-            except Exception as e:
-                print(f"No more pages or 'Next' button not found: {e}")
-                break  # Stop if no "Next" button is found
-
-        return news_results[:max_articles]  # Ensure we return only max_articles
-
-    all_news_data = {}
-    for topic, url in topics.items():
-        all_news_data[topic] = get_news_url(url)
+        except Exception as e:
+            print(f"Error fetching RSS feed for {topic}: {e}")
+            all_news_data[topic] = []
 
     # Keep gnews_url.json for debugging (optional)
     with open("gnews_url.json", "w") as f:
@@ -361,35 +215,59 @@ def get_news_data():
     for topic, articles in url_data.items():
         detailed_topic_data = []
         article_count = 0
+        print(f"Processing {len(articles)} articles for {topic}...")
 
         for item in articles:
             url = item["link"]
             snippet = item.get("snippet", "")
             title = item.get("title", "")
             source = item.get("source", "")
+            published_date = item.get("published_date")
+
+            # Resolve Google News redirect URL to actual article URL
+            actual_url = resolve_google_news_url(url)
+            if actual_url != url:
+                print(f"  Resolved URL: {actual_url[:80]}...")
 
             # Extract article content with fallback strategy
-            (
-                article_content,
-                article_title,
-                article_url,
-                article_image,
-                article_date,
-                publisher,
-            ) = extract_article_content(url, snippet, title, source)
+            try:
+                (
+                    article_content,
+                    article_title,
+                    article_url,
+                    article_image,
+                    article_date,
+                    publisher,
+                ) = extract_article_content(actual_url, snippet, title, source)
+            except Exception as e:
+                print(f"  Error extracting content from {title[:50]}...: {e}")
+                continue
 
             # Skip if no content available or content is too short (quality filter)
             if not article_content or len(article_content) < 50:
+                print(
+                    f"  Skipped: Content too short or empty ({len(article_content) if article_content else 0} chars)"
+                )
                 continue
 
             # Additional quality check: skip if title is too short after extraction
             if not article_title or len(article_title.strip()) < 10:
+                print(
+                    f"  Skipped: Title too short ({len(article_title.strip()) if article_title else 0} chars)"
+                )
                 continue
 
             # Handle image replacement for .ico files
             if article_image and (article_image.find(".ico") != -1):
                 print("replaced_image_url :" + article_image)
                 article_image = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
+
+            # Use published_date from RSS if available, otherwise use extracted date
+            final_date = None
+            if published_date:
+                final_date = published_date  # Already in ISO format
+            elif article_date:
+                final_date = article_date
 
             news_item = {
                 "news_number": article_count,
@@ -398,16 +276,17 @@ def get_news_data():
                 "publisher": publisher,
                 "url": article_url,
                 "imgURL": article_image,
-                "date": article_date,
-                "snippet": snippet,  # Preserve snippet from Google News
+                "date": final_date,
+                "snippet": snippet,  # Preserve snippet from Google News RSS
             }
 
             detailed_topic_data.append(news_item)
             article_count += 1
+            print(f"  ✓ Added article {article_count} for {topic}")
 
         detailed_news_data[topic] = detailed_topic_data
+        print(f"Completed {topic}: {len(detailed_topic_data)} articles processed")
 
-    driver.quit()
     print(
         f"Scraping completed. Processing {sum(len(articles) for articles in detailed_news_data.values())} articles"
     )
@@ -420,7 +299,7 @@ def extract_article_content(url, snippet, title, source):
     Extract article content with fallback strategy:
     1. Primary: Newspaper3k download + parse
     2. Secondary: Try reader-mode URLs
-    3. Final: Use Google News snippet
+    3. Final: Use Google News RSS snippet
     """
     # PRIMARY: Try Newspaper3k normally
     try:
@@ -464,7 +343,7 @@ def extract_article_content(url, snippet, title, source):
         except Exception:
             continue  # Try next reader URL
 
-    # FINAL FALLBACK: Use Google News snippet
+    # FINAL FALLBACK: Use Google News RSS snippet
     # Combine snippet with title and source for better context
     fallback_content = f"{title}\n\n{snippet}"
     if source:
@@ -489,6 +368,7 @@ def extract_article_content(url, snippet, title, source):
 def summarize_and_store_news(news_data):
     """
     Summarizes the content using OpenRouter and stores in Supabase.
+    Includes deduplication by article_url before insert.
     """
     articles_inserted = 0
 
