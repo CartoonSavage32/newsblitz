@@ -52,43 +52,104 @@ topics = {
 }
 
 
-def delete_old_articles():
+def manage_article_lifecycle():
     """
-    Delete articles older than 18 hours to keep DB clean.
-    Uses published_at if available, otherwise falls back to created_at.
-    Supabase doesn't support COALESCE in delete, so we delete in two passes.
+    Manage article lifecycle based on timestamp fields.
+
+    Lifecycle Stages:
+    - ACTIVE: 0 → 48 hours (now < expired_at)
+      - expired = false
+      - Included in sitemap-articles.xml
+      - HTTP 200
+
+    - EXPIRED: 48 hours → 7 days (expired_at ≤ now < gone_at)
+      - expired = true
+      - Removed from sitemap
+      - HTTP 200 with archived UI
+
+    - GONE: 7 → 30 days (gone_at ≤ now < deleted_at)
+      - Article still exists in DB
+      - Return HTTP 410 Gone
+      - Add meta robots: noindex, follow
+
+    - HARD DELETE: 30+ days (now ≥ deleted_at)
+      - Physically delete row from DB
+
+    Why this approach?
+    - Google may have indexed these articles and will try to crawl them again
+    - Returning 404 for previously indexed content hurts SEO and wastes crawl budget
+    - 410 (Gone) status is better for deindexing than 404
+    - Keeping articles for 30 days allows proper Google deindexing
     """
     try:
-        # Calculate cutoff: 18 hours ago
-        cutoff = datetime.now() - timedelta(hours=18)
-        cutoff_iso = cutoff.isoformat()
+        now = datetime.now()
+        now_iso = now.isoformat()
 
+        expired_count = 0
         deleted_count = 0
 
-        # Pass 1: Delete articles with published_at < cutoff
+        # Step 1: Mark articles as expired where now >= expired_at (48+ hours old)
+        # Update expired boolean for articles that have passed their expired_at time
         result1 = (
             supabase.table("news_articles")
-            .delete()
-            .lt("published_at", cutoff_iso)
+            .update({"expired": True})
+            .lt("expired_at", now_iso)
+            .eq("expired", False)
             .execute()
         )
-        deleted_count += len(result1.data) if result1.data else 0
+        expired_count += len(result1.data) if result1.data else 0
 
-        # Pass 2: Delete articles where published_at is NULL and created_at < cutoff
+        # Fallback: For articles without expired_at, use 48-hour cutoff from published_at
+        expired_cutoff = now - timedelta(hours=48)
+        expired_cutoff_iso = expired_cutoff.isoformat()
+
         result2 = (
             supabase.table("news_articles")
-            .delete()
-            .is_("published_at", "null")
-            .lt("created_at", cutoff_iso)
+            .update({"expired": True})
+            .is_("expired_at", "null")
+            .lt("published_at", expired_cutoff_iso)
+            .eq("expired", False)
             .execute()
         )
-        deleted_count += len(result2.data) if result2.data else 0
+        expired_count += len(result2.data) if result2.data else 0
 
-        print(f"Deleted {deleted_count} articles older than 18 hours")
-        return deleted_count
+        # Step 2: Permanently delete articles where now >= deleted_at (30+ days old)
+        # These articles have been in GONE state and can now be removed
+        result3 = (
+            supabase.table("news_articles").delete().lt("deleted_at", now_iso).execute()
+        )
+        deleted_count += len(result3.data) if result3.data else 0
+
+        # Fallback: For articles without deleted_at, use 30-day cutoff
+        delete_cutoff = now - timedelta(days=30)
+        delete_cutoff_iso = delete_cutoff.isoformat()
+
+        result4 = (
+            supabase.table("news_articles")
+            .delete()
+            .is_("deleted_at", "null")
+            .lt("published_at", delete_cutoff_iso)
+            .execute()
+        )
+        deleted_count += len(result4.data) if result4.data else 0
+
+        # Fallback for articles with NULL published_at
+        result5 = (
+            supabase.table("news_articles")
+            .delete()
+            .is_("deleted_at", "null")
+            .is_("published_at", "null")
+            .lt("created_at", delete_cutoff_iso)
+            .execute()
+        )
+        deleted_count += len(result5.data) if result5.data else 0
+
+        print(f"Marked {expired_count} articles as expired (48+ hours old)")
+        print(f"Hard deleted {deleted_count} articles (30+ days old)")
+        return expired_count, deleted_count
     except Exception as e:
-        print(f"Error deleting old articles: {e}")
-        return 0
+        print(f"Error managing article lifecycle: {e}")
+        return 0, 0
 
 
 def extract_image_from_article(url):
@@ -216,8 +277,10 @@ def get_news_data():
     Fetch news articles from Google News RSS feeds.
     Returns dictionary with category as key and list of articles as value.
     """
-    # Clean up old articles before scraping new ones (18-hour retention)
-    delete_old_articles()
+    # Manage article lifecycle:
+    # - Mark articles as expired after 48 hours
+    # - Hard delete articles after 30 days
+    manage_article_lifecycle()
 
     all_news_data = {}
 
@@ -509,8 +572,20 @@ def summarize_and_store_news(news_data):
                     # If check fails, continue anyway (don't block ingestion)
                     print(f"Warning: Could not check for duplicates: {e}")
 
-                # Insert into Supabase
+                # Insert into Supabase with lifecycle timestamps
+                # Lifecycle: expired_at = +48h, gone_at = +7d, deleted_at = +30d
                 try:
+                    # Calculate lifecycle timestamps from published_at
+                    published_at = article["date"]
+                    base_time = (
+                        datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                        if published_at
+                        else datetime.now()
+                    )
+                    expired_at = (base_time + timedelta(hours=48)).isoformat()
+                    gone_at = (base_time + timedelta(days=7)).isoformat()
+                    deleted_at = (base_time + timedelta(days=30)).isoformat()
+
                     supabase.table("news_articles").insert(
                         {
                             "category": topic,
@@ -518,8 +593,12 @@ def summarize_and_store_news(news_data):
                             "summary": summary,
                             "image_url": article["imgURL"],
                             "source": article["publisher"],
-                            "published_at": article["date"],
+                            "published_at": published_at,
                             "article_url": article_url,
+                            "expired": False,  # Initially not expired
+                            "expired_at": expired_at,
+                            "gone_at": gone_at,
+                            "deleted_at": deleted_at,
                             "raw": {
                                 "news_number": article["news_number"],
                                 "snippet": article.get("snippet", ""),

@@ -42,3 +42,27 @@ export function extractIdFromSlug(slug: string | undefined): string | null {
   return null;
 }
 
+/**
+ * Normalize URL to ensure single slashes and no trailing slash (except root)
+ * Prevents double slashes and ensures clean URLs for SEO
+ */
+export function normalizeUrl(baseUrl: string, path: string = ''): string {
+  // Remove trailing slash from baseUrl (except if it's just the domain)
+  const cleanBase = baseUrl.replace(/\/+$/, '') || baseUrl;
+  
+  // Ensure path starts with single slash
+  const cleanPath = path ? `/${path.replace(/^\/+/, '')}` : '';
+  
+  // Combine and remove any double slashes (except after protocol)
+  const combined = `${cleanBase}${cleanPath}`;
+  return combined.replace(/([^:]\/)\/+/g, '$1');
+}
+
+/**
+ * Generate category slug from category name
+ * Converts category to lowercase URL-friendly format
+ */
+export function generateCategorySlug(category: string): string {
+  return category.toLowerCase().trim();
+}
+

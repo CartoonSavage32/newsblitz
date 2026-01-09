@@ -1,14 +1,14 @@
 import { ReadMoreButton } from '@/components/news/ReadMoreButton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { extractIdFromSlug, generateArticleSlug } from '@/lib/utils/slug';
+import { extractIdFromSlug, generateArticleSlug, normalizeUrl } from '@/lib/utils/slug';
 import { format } from 'date-fns';
 import { ArrowLeft, Calendar } from 'lucide-react';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
-import { getArticleById, getRelatedArticles } from '@/lib/news/repository';
+import { getArticleWithExpiredStatus, getRelatedArticles } from '@/lib/news/repository';
 
 // Generate metadata for SEO
 // eslint-disable-next-line react-refresh/only-export-components
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const article = await getArticleById(id);
+  const { article, lifecycleState } = await getArticleWithExpiredStatus(id);
   if (!article) {
     return {
       title: 'Article Not Found | NewsBlitz',
@@ -39,14 +39,23 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     : article.description;
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
-  const articleUrl = `${siteUrl}/news/${slug}`;
+  const articleUrl = normalizeUrl(siteUrl, `news/${slug}`);
+
+  // Robots directive based on lifecycle state:
+  // - active: index, follow (normal page)
+  // - expired: index, follow (archived but still accessible)
+  // - gone: noindex, follow (HTTP 410 - tell Google to remove from index)
+  const robotsDirective = lifecycleState === 'gone' 
+    ? { index: false, follow: true }
+    : { index: true, follow: true };
 
   return {
     title: `${seoTitle} | NewsBlitz`,
     description: metaDescription,
     alternates: {
-      canonical: article.readMoreUrl, // Canonical to original source (SEO best practice for aggregated content)
+      canonical: articleUrl, // Canonical to self - required for proper indexing
     },
+    robots: robotsDirective,
     openGraph: {
       title: article.title,
       description: article.description,
@@ -77,6 +86,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
+/**
+ * Article Page - Handles articles in all lifecycle states
+ * 
+ * Lifecycle States:
+ * - ACTIVE (0-48 hours): now < expired_at → HTTP 200, normal page
+ * - EXPIRED (48 hours - 7 days): expired_at ≤ now < gone_at → HTTP 200, archived UI
+ * - GONE (7-30 days): gone_at ≤ now < deleted_at → HTTP 410, noindex
+ * - DELETED (30+ days): now ≥ deleted_at → 404 (row no longer exists)
+ * 
+ * SEO Strategy:
+ * - Active articles get full indexing and sitemap inclusion
+ * - Expired articles show archived UI but remain accessible
+ * - Gone articles return 410 to tell Google to remove from index
+ * - Deleted articles return 404 (row doesn't exist)
+ */
 export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const id = extractIdFromSlug(slug);
@@ -84,17 +108,58 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     notFound();
   }
 
-  const article = await getArticleById(id);
+  const { article, lifecycleState } = await getArticleWithExpiredStatus(id);
   if (!article) {
     notFound();
   }
+
+  // Handle GONE state (7-30 days) - return 410 Gone page
+  // HTTP 410 tells Google the content existed but is permanently gone
+  if (lifecycleState === 'gone') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="container mx-auto px-4 py-8 max-w-2xl text-center">
+          <h1 className="text-3xl font-bold mb-4">Article No Longer Available</h1>
+          <p className="text-muted-foreground mb-6">
+            This article has been permanently removed and is no longer available.
+          </p>
+          <Button asChild>
+            <Link href="/news">Browse Latest News</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle EXPIRED state (48 hours - 7 days) - show archived UI with HTTP 200
+  if (lifecycleState === 'expired') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="container mx-auto px-4 py-8 max-w-2xl text-center">
+          <h1 className="text-3xl font-bold mb-4">Article Archived</h1>
+          <p className="text-muted-foreground mb-6">
+            This article has been archived. It was originally published on{' '}
+            {format(article.date, 'MMMM d, yyyy')}.
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            <strong>{article.title}</strong>
+          </p>
+          <Button asChild>
+            <Link href="/news">Browse Latest News</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ACTIVE state - show full article
 
   // Fetch related articles from same category for SEO internal linking
   const relatedArticles = await getRelatedArticles(article.category, article.id, 3);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
   const articleSlug = slug;
-  const articleUrl = `${siteUrl}/news/${articleSlug}`;
+  const articleUrl = normalizeUrl(siteUrl, `news/${articleSlug}`);
 
   // Structured data (JSON-LD) for SEO
   const structuredData = {
@@ -147,7 +212,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
         '@type': 'ListItem',
         position: 3,
         name: article.category,
-        item: `${siteUrl}/news?category=${encodeURIComponent(article.category)}`,
+        item: normalizeUrl(siteUrl, `category/${article.category.toLowerCase()}`),
       },
       {
         '@type': 'ListItem',
@@ -204,7 +269,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
               <li>/</li>
               <li>
                 <Link
-                  href={`/news?category=${encodeURIComponent(article.category)}`}
+                  href={`/category/${article.category.toLowerCase()}`}
                   className="hover:text-foreground transition-colors"
                 >
                   {article.category}
@@ -332,7 +397,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
           {/* Category Link */}
           <div className="mt-8 pt-8 border-t">
             <Link
-              href={`/news?category=${encodeURIComponent(article.category)}`}
+              href={`/category/${article.category.toLowerCase()}`}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               ← More {article.category} news
