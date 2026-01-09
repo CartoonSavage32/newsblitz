@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -152,77 +153,103 @@ def manage_article_lifecycle():
         return 0, 0
 
 
-def extract_image_from_article(url):
+def is_google_image(img_url):
+    """Check if image URL is from Google (should be rejected for direct use)."""
+    if not img_url:
+        return False
+    img_lower = img_url.lower()
+    google_patterns = [
+        "news.google.com",
+        "googleusercontent.com",
+        "google.com/imgres",
+        "lh3.googleusercontent.com",
+        "encrypted-tbn",
+    ]
+    return any(pattern in img_lower for pattern in google_patterns)
+
+
+def is_valid_article_image(img_url):
+    """
+    Validate image URL - reject tracking pixels, logos, and Google cached images.
+    Used for article-extracted images (strict validation).
+    """
+    if not img_url:
+        return False
+
+    img_lower = img_url.lower()
+
+    # Reject ANY Google-hosted images - we want publisher's own images
+    if is_google_image(img_url):
+        return False
+
+    # Reject .ico files
+    if img_lower.endswith(".ico"):
+        return False
+
+    # Reject common logo/icon patterns
+    logo_patterns = ["logo", "icon", "avatar", "favicon", "sprite", "badge", "brand"]
+    if any(pattern in img_lower for pattern in logo_patterns):
+        return False
+
+    # Reject common tracking pixel patterns
+    tracking_patterns = [
+        "1x1",
+        "pixel",
+        "tracking",
+        "beacon",
+        "analytics",
+        "spacer",
+        "blank",
+        "transparent",
+        "shim",
+    ]
+    if any(pattern in img_lower for pattern in tracking_patterns):
+        return False
+
+    # Reject very small images based on URL dimensions
+    size_match = re.search(
+        r"[?&_x-](?:w|width|h|height|size)[=_-]?(\d+)", img_url, re.IGNORECASE
+    )
+    if size_match:
+        size = int(size_match.group(1))
+        if size < 300:  # Prefer images >= 300px
+            return False
+
+    # Reject images with small dimensions in filename (e.g., thumb_100x100.jpg)
+    dim_match = re.search(r"(\d+)x(\d+)", img_url)
+    if dim_match:
+        w, h = int(dim_match.group(1)), int(dim_match.group(2))
+        if w < 300 or h < 200:
+            return False
+
+    return True
+
+
+def extract_image_from_article(url, rss_image_fallback=None):
     """
     Extract the actual article hero/featured image from the source URL.
 
-    Priority order:
+    Priority order (STRICT - never use Google images directly):
     1. <meta property="og:image"> (most reliable for news sites)
     2. <meta name="twitter:image"> or <meta name="twitter:image:src">
     3. <meta property="article:image"> (some news sites use this)
     4. <link rel="image_src"> (older standard)
-    5. First large <img> in article body (heuristic fallback)
+    5. First large <img> in article body (>= 300px)
     6. Newspaper3k article.top_image
-    7. Fallback placeholder image
+    7. RSS feed image (only if not a Google image)
+    8. Fallback placeholder image
+
+    Args:
+        url: The article URL to extract image from
+        rss_image_fallback: Optional image URL from RSS feed (may be Google image)
 
     Filters out:
-    - Google News cached images (news.google.com URLs)
+    - Google News/googleusercontent images (NEVER stored directly)
     - Tracking pixels and small images
     - .ico files and logos
     - Images smaller than 300px
     """
-    FALLBACK_IMAGE = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
-
-    def is_valid_image(img_url):
-        """Validate image URL - reject tracking pixels, logos, and Google cached images."""
-        if not img_url:
-            return False
-
-        img_lower = img_url.lower()
-
-        # Reject Google News cached images - we want the actual source image
-        if "news.google.com" in img_lower or "google.com/imgres" in img_lower:
-            return False
-
-        # Reject .ico files
-        if img_lower.endswith(".ico"):
-            return False
-
-        # Reject common logo/icon patterns
-        logo_patterns = ["logo", "icon", "avatar", "favicon", "sprite", "badge"]
-        if any(pattern in img_lower for pattern in logo_patterns):
-            return False
-
-        # Reject common tracking pixel patterns
-        tracking_patterns = [
-            "1x1",
-            "pixel",
-            "tracking",
-            "beacon",
-            "analytics",
-            "spacer",
-            "blank",
-        ]
-        if any(pattern in img_lower for pattern in tracking_patterns):
-            return False
-
-        # Reject very small images based on URL dimensions
-        size_match = re.search(
-            r"[?&_x-](?:w|width|h|height|size)[=_-]?(\d+)", img_url, re.IGNORECASE
-        )
-        if size_match:
-            size = int(size_match.group(1))
-            if size < 200:
-                return False
-
-        # Reject images with small dimensions in filename (e.g., thumb_100x100.jpg)
-        dim_match = re.search(r"(\d+)x(\d+)", img_url)
-        if dim_match:
-            w, h = int(dim_match.group(1)), int(dim_match.group(2))
-            if w < 200 or h < 150:
-                return False
-
-        return True
+    FALLBACK_PLACEHOLDER = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
 
     def normalize_image_url(img_url, base_url):
         """Convert relative URLs to absolute URLs."""
@@ -241,12 +268,12 @@ def extract_image_from_article(url):
             return f"{parsed.scheme}://{parsed.netloc}{base_path}/{img_url}"
         return img_url
 
-    # Try to fetch and parse the page
+    # Try to fetch and parse the page for image extraction
     soup = None
     try:
         response = requests.get(
             url,
-            timeout=15,
+            timeout=10,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -259,11 +286,11 @@ def extract_image_from_article(url):
         print(f"    Warning: Could not fetch {url[:50]}... for image extraction: {e}")
 
     if soup:
-        # Priority 1: og:image (most reliable)
+        # Priority 1: og:image (most reliable for news sites)
         og_image = soup.find("meta", property="og:image")
         if og_image and og_image.get("content"):
             img_url = normalize_image_url(og_image["content"], url)
-            if img_url and is_valid_image(img_url):
+            if img_url and is_valid_article_image(img_url):
                 return img_url
 
         # Priority 2: twitter:image (multiple attribute names)
@@ -275,25 +302,24 @@ def extract_image_from_article(url):
             twitter_image = soup.find("meta", attrs=attr)
             if twitter_image and twitter_image.get("content"):
                 img_url = normalize_image_url(twitter_image["content"], url)
-                if img_url and is_valid_image(img_url):
+                if img_url and is_valid_article_image(img_url):
                     return img_url
 
         # Priority 3: article:image (some publishers use this)
         article_image = soup.find("meta", property="article:image")
         if article_image and article_image.get("content"):
             img_url = normalize_image_url(article_image["content"], url)
-            if img_url and is_valid_image(img_url):
+            if img_url and is_valid_article_image(img_url):
                 return img_url
 
         # Priority 4: link rel="image_src" (older standard)
         link_image = soup.find("link", rel="image_src")
         if link_image and link_image.get("href"):
             img_url = normalize_image_url(link_image["href"], url)
-            if img_url and is_valid_image(img_url):
+            if img_url and is_valid_article_image(img_url):
                 return img_url
 
-        # Priority 5: First large image in article content
-        # Look for images in article/main content areas
+        # Priority 5: First large image in article content (>= 300px)
         content_selectors = [
             "article",
             "main",
@@ -301,28 +327,29 @@ def extract_image_from_article(url):
             ".post-content",
             ".entry-content",
             "[role='main']",
+            ".story-body",
+            ".article-content",
         ]
         for selector in content_selectors:
             try:
                 content = soup.select_one(selector)
                 if content:
-                    for img in content.find_all("img", src=True)[
-                        :5
-                    ]:  # Check first 5 images
+                    for img in content.find_all("img", src=True)[:5]:
                         img_url = normalize_image_url(
                             img.get("src") or img.get("data-src"), url
                         )
-                        if img_url and is_valid_image(img_url):
+                        if img_url and is_valid_article_image(img_url):
                             # Check if image has reasonable dimensions in attributes
                             width = img.get("width", "0")
                             height = img.get("height", "0")
                             try:
-                                if int(width) >= 300 or int(height) >= 200:
+                                w = int(str(width).replace("px", ""))
+                                h = int(str(height).replace("px", ""))
+                                if w >= 300 or h >= 200:
                                     return img_url
                             except (ValueError, TypeError):
-                                # No dimensions, check URL for size hints or accept it
-                                if is_valid_image(img_url):
-                                    return img_url
+                                # No valid dimensions, accept if URL passes validation
+                                return img_url
             except Exception:
                 continue
 
@@ -331,13 +358,17 @@ def extract_image_from_article(url):
         article = Article(url)
         article.download()
         article.parse()
-        if article.top_image and is_valid_image(article.top_image):
+        if article.top_image and is_valid_article_image(article.top_image):
             return article.top_image
     except Exception:
         pass
 
-    # Priority 7: Fallback placeholder
-    return FALLBACK_IMAGE
+    # Priority 7: RSS feed image fallback (ONLY if not a Google image)
+    if rss_image_fallback and not is_google_image(rss_image_fallback):
+        return rss_image_fallback
+
+    # Priority 8: Fallback placeholder (only when no other image available)
+    return FALLBACK_PLACEHOLDER
 
 
 def resolve_google_news_url(google_url):
@@ -507,6 +538,27 @@ def get_news_data():
                     if len(snippet.strip()) < 20:
                         continue
 
+                    # Extract RSS image (may be Google image - used as last resort fallback)
+                    rss_image = None
+                    # Try media:content first (common in RSS feeds)
+                    if hasattr(entry, "media_content") and entry.media_content:
+                        for media in entry.media_content:
+                            if media.get("url"):
+                                rss_image = media["url"]
+                                break
+                    # Try media:thumbnail
+                    if not rss_image and hasattr(entry, "media_thumbnail"):
+                        for thumb in entry.media_thumbnail:
+                            if thumb.get("url"):
+                                rss_image = thumb["url"]
+                                break
+                    # Try enclosure
+                    if not rss_image and hasattr(entry, "enclosures"):
+                        for enc in entry.enclosures:
+                            if enc.get("type", "").startswith("image"):
+                                rss_image = enc.get("url")
+                                break
+
                     news_results.append(
                         {
                             "link": link,
@@ -515,6 +567,7 @@ def get_news_data():
                             "date": date_str,
                             "source": source,
                             "published_date": published_date,
+                            "rss_image": rss_image,  # May be Google image, used as fallback only
                         }
                     )
                 except Exception as e:
@@ -547,6 +600,7 @@ def get_news_data():
             title = item.get("title", "")
             source = item.get("source", "")
             published_date = item.get("published_date")
+            rss_image = item.get("rss_image")  # May be Google image, used as fallback
 
             # Resolve Google News redirect URL to actual article URL
             actual_url = resolve_google_news_url(url)
@@ -554,12 +608,13 @@ def get_news_data():
                 print(f"  Resolved URL: {actual_url[:80]}...")
 
             # Extract article content with fallback strategy
+            # NOTE: Image extraction is done LATER in parallel with summarization
             try:
                 (
                     article_content,
                     article_title,
                     article_url,
-                    article_image,
+                    _,  # Image is None here, extracted separately
                     article_date,
                     publisher,
                 ) = extract_article_content(actual_url, snippet, title, source)
@@ -581,9 +636,6 @@ def get_news_data():
                 )
                 continue
 
-            # Image validation is already handled in extract_image_from_article()
-            # No need for additional .ico check here
-
             # Use published_date from RSS if available, otherwise use extracted date
             final_date = None
             if published_date:
@@ -597,7 +649,9 @@ def get_news_data():
                 "content": article_content,
                 "publisher": publisher,
                 "url": article_url,
-                "imgURL": article_image,
+                "actual_url": actual_url,  # Resolved URL for image extraction
+                "rss_image": rss_image,  # Fallback image from RSS (may be Google)
+                "imgURL": None,  # Will be extracted in parallel with summarization
                 "date": final_date,
                 "snippet": snippet,  # Preserve snippet from Google News RSS
             }
@@ -623,10 +677,9 @@ def extract_article_content(url, snippet, title, source):
     2. Secondary: Try reader-mode URLs
     3. Final: Use Google News RSS snippet
 
-    Images are extracted separately using extract_image_from_article().
+    NOTE: Image extraction is done separately in parallel with summarization.
+    This function returns None for image_url - images are extracted later.
     """
-    article_image = None
-
     # PRIMARY: Try Newspaper3k normally
     try:
         article = Article(url)
@@ -634,14 +687,11 @@ def extract_article_content(url, snippet, title, source):
         article.parse()
 
         if article.text and len(article.text) >= 150:
-            # Extract image using priority-based method
-            article_image = extract_image_from_article(url)
-
             return (
                 article.text,
                 article.title or title,
                 article.url or url,
-                article_image,
+                None,  # Image extracted separately in parallel
                 article.publish_date.isoformat() if article.publish_date else None,
                 urlparse(article.url or url).netloc.replace("www.", "").split(".")[0],
             )
@@ -661,14 +711,11 @@ def extract_article_content(url, snippet, title, source):
             article.parse()
 
             if article.text and len(article.text) >= 150:
-                # Extract image using priority-based method (use original URL, not reader URL)
-                article_image = extract_image_from_article(url)
-
                 return (
                     article.text,
                     article.title or title,
                     url,  # Keep original URL
-                    article_image,
+                    None,  # Image extracted separately in parallel
                     article.publish_date.isoformat() if article.publish_date else None,
                     urlparse(url).netloc.replace("www.", "").split(".")[0],
                 )
@@ -676,7 +723,6 @@ def extract_article_content(url, snippet, title, source):
             continue  # Try next reader URL
 
     # FINAL FALLBACK: Use Google News RSS snippet
-    # Combine snippet with title and source for better context
     fallback_content = f"{title}\n\n{snippet}"
     if source:
         fallback_content = f"{title} ({source})\n\n{snippet}"
@@ -687,14 +733,11 @@ def extract_article_content(url, snippet, title, source):
     except Exception:
         publisher = source or "Unknown"
 
-    # Try to extract image even for fallback content
-    article_image = extract_image_from_article(url)
-
     return (
         fallback_content,
         title,
         url,
-        article_image,  # Use extracted image or fallback placeholder
+        None,  # Image extracted separately in parallel
         None,  # No date available from snippet
         publisher,
     )
@@ -702,78 +745,130 @@ def extract_article_content(url, snippet, title, source):
 
 def summarize_and_store_news(news_data):
     """
-    Summarizes the content using OpenRouter and stores in Supabase.
-    Includes deduplication by article_url before insert.
+    Summarizes content and extracts images IN PARALLEL using ThreadPoolExecutor.
+    Stores results in Supabase with deduplication by article_url.
+
+    Pipeline:
+    1. For each article, submit both summarization and image extraction to thread pool
+    2. Summarization and image fetching run concurrently (don't block each other)
+    3. Wait for both to complete, then store in Supabase
     """
     articles_inserted = 0
+    # Use 4 workers to balance speed vs rate limiting
+    max_workers = 4
 
+    def process_article(topic, article):
+        """Process a single article: summarize content and extract image in parallel."""
+        content = article["content"]
+        if not content:
+            return None
+
+        article_url = article["url"]
+        actual_url = article.get("actual_url", article_url)
+        rss_image = article.get("rss_image")
+
+        # Check for duplicates first (before expensive operations)
+        try:
+            existing = (
+                supabase.table("news_articles")
+                .select("id")
+                .eq("article_url", article_url)
+                .limit(1)
+                .execute()
+            )
+            if existing.data and len(existing.data) > 0:
+                print(f"Skipping duplicate article: {article_url[:60]}...")
+                return None
+        except Exception as e:
+            print(f"Warning: Could not check for duplicates: {e}")
+
+        # Run summarization and image extraction in parallel using nested ThreadPoolExecutor
+        summary = None
+        image_url = None
+
+        with ThreadPoolExecutor(max_workers=2) as inner_executor:
+            # Submit both tasks
+            summary_future = inner_executor.submit(get_summary_from_openrouter, content)
+            image_future = inner_executor.submit(
+                extract_image_from_article, actual_url, rss_image
+            )
+
+            # Wait for both to complete
+            try:
+                summary = summary_future.result(timeout=30)
+            except Exception as e:
+                print(f"  Summarization failed: {e}")
+
+            try:
+                image_url = image_future.result(timeout=15)
+            except Exception as e:
+                print(f"  Image extraction failed: {e}")
+                # Use fallback placeholder if image extraction completely fails
+                image_url = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
+
+        if not summary:
+            return None
+
+        # Prepare article data for insertion
+        number = article["news_number"]
+        print(f"  ✓ Article {number} of {topic}: summarized + image extracted")
+
+        # Calculate lifecycle timestamps
+        published_at = article["date"]
+        base_time = (
+            datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+            if published_at
+            else datetime.now()
+        )
+        expired_at = (base_time + timedelta(hours=48)).isoformat()
+        gone_at = (base_time + timedelta(days=7)).isoformat()
+        deleted_at = (base_time + timedelta(days=30)).isoformat()
+
+        return {
+            "category": topic,
+            "title": article["title"],
+            "summary": summary,
+            "image_url": image_url,
+            "source": article["publisher"],
+            "published_at": published_at,
+            "article_url": article_url,
+            "expired": False,
+            "expired_at": expired_at,
+            "gone_at": gone_at,
+            "deleted_at": deleted_at,
+            "raw": {
+                "news_number": article["news_number"],
+                "snippet": article.get("snippet", ""),
+                "original_content": content,
+            },
+        }
+
+    # Process all articles across all topics
+    all_articles = []
     for topic, articles in news_data.items():
         for article in articles:
-            content = article["content"]
-            if not content:
-                continue
+            all_articles.append((topic, article))
 
-            summary = get_summary_from_openrouter(content)
-            if summary:
-                article["content"] = summary  # Replace content with summary
-                number = article["news_number"]
-                print(f"article number {number} of topic {topic} summarised")
+    print(
+        f"Processing {len(all_articles)} articles (summarization + image extraction in parallel)..."
+    )
 
-                # Deduplication: Check if article_url already exists before inserting
-                article_url = article["url"]
+    # Process articles with thread pool
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_article, topic, article): (topic, article)
+            for topic, article in all_articles
+        }
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                # Insert into Supabase
                 try:
-                    existing = (
-                        supabase.table("news_articles")
-                        .select("id")
-                        .eq("article_url", article_url)
-                        .limit(1)
-                        .execute()
-                    )
-                    if existing.data and len(existing.data) > 0:
-                        print(f"Skipping duplicate article: {article_url}")
-                        continue
-                except Exception as e:
-                    # If check fails, continue anyway (don't block ingestion)
-                    print(f"Warning: Could not check for duplicates: {e}")
-
-                # Insert into Supabase with lifecycle timestamps
-                # Lifecycle: expired_at = +48h, gone_at = +7d, deleted_at = +30d
-                try:
-                    # Calculate lifecycle timestamps from published_at
-                    published_at = article["date"]
-                    base_time = (
-                        datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-                        if published_at
-                        else datetime.now()
-                    )
-                    expired_at = (base_time + timedelta(hours=48)).isoformat()
-                    gone_at = (base_time + timedelta(days=7)).isoformat()
-                    deleted_at = (base_time + timedelta(days=30)).isoformat()
-
-                    supabase.table("news_articles").insert(
-                        {
-                            "category": topic,
-                            "title": article["title"],
-                            "summary": summary,
-                            "image_url": article["imgURL"],
-                            "source": article["publisher"],
-                            "published_at": published_at,
-                            "article_url": article_url,
-                            "expired": False,  # Initially not expired
-                            "expired_at": expired_at,
-                            "gone_at": gone_at,
-                            "deleted_at": deleted_at,
-                            "raw": {
-                                "news_number": article["news_number"],
-                                "snippet": article.get("snippet", ""),
-                                "original_content": content,  # Store original article text before summarization
-                            },
-                        }
-                    ).execute()
+                    supabase.table("news_articles").insert(result).execute()
                     articles_inserted += 1
                 except Exception as e:
                     print(f"Error inserting article to Supabase: {e}")
-                    continue
 
     print(
         f"Summarization and storage completed. Inserted {articles_inserted} articles into Supabase"
