@@ -28,17 +28,8 @@ export function MobileBottomNavbar({ disableDonate = true }: MobileBottomNavbarP
                         <span className="text-xs">Feedback</span>
                     </Button>
                 </Link>
-                {/* Donation feature disabled for MVP */}
-                {disableDonate ? (
-                    <Button
-                        variant="ghost"
-                        className="flex flex-col items-center gap-1 opacity-50 cursor-not-allowed"
-                        disabled
-                    >
-                        <Heart className="h-5 w-5" />
-                        <span className="text-xs">Donate</span>
-                    </Button>
-                ) : (
+                {/* Donate button - set disableDonate={false} to re-enable */}
+                {!disableDonate && (
                     <Link href="/donate">
                         <Button variant="ghost" className="flex flex-col items-center gap-1">
                             <Heart className="h-5 w-5" />
