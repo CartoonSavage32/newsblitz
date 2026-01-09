@@ -154,87 +154,179 @@ def manage_article_lifecycle():
 
 def extract_image_from_article(url):
     """
-    Extract article image from metadata tags with priority:
-    1. <meta property="og:image">
-    2. <meta name="twitter:image">
-    3. Newspaper3k article.top_image
-    4. Fallback placeholder image
+    Extract the actual article hero/featured image from the source URL.
 
-    Rejects images that:
-    - End with .ico
-    - Are tracking pixels (1x1, very small)
-    - Are smaller than 300x300 (if size detectable)
+    Priority order:
+    1. <meta property="og:image"> (most reliable for news sites)
+    2. <meta name="twitter:image"> or <meta name="twitter:image:src">
+    3. <meta property="article:image"> (some news sites use this)
+    4. <link rel="image_src"> (older standard)
+    5. First large <img> in article body (heuristic fallback)
+    6. Newspaper3k article.top_image
+    7. Fallback placeholder image
+
+    Filters out:
+    - Google News cached images (news.google.com URLs)
+    - Tracking pixels and small images
+    - .ico files and logos
+    - Images smaller than 300px
     """
     FALLBACK_IMAGE = "https://media.istockphoto.com/id/1409309637/vector/breaking-news-label-banner-isolated-vector-design.jpg?s=2048x2048&w=is&k=20&c=rHMT7lr46TFGxQqLQHvSGD6r79AIeTVng-KYA6J1XKM="
 
     def is_valid_image(img_url):
-        """Validate image URL - reject .ico, tracking pixels, and small images."""
+        """Validate image URL - reject tracking pixels, logos, and Google cached images."""
         if not img_url:
             return False
 
+        img_lower = img_url.lower()
+
+        # Reject Google News cached images - we want the actual source image
+        if "news.google.com" in img_lower or "google.com/imgres" in img_lower:
+            return False
+
         # Reject .ico files
-        if img_url.lower().endswith(".ico"):
+        if img_lower.endswith(".ico"):
+            return False
+
+        # Reject common logo/icon patterns
+        logo_patterns = ["logo", "icon", "avatar", "favicon", "sprite", "badge"]
+        if any(pattern in img_lower for pattern in logo_patterns):
             return False
 
         # Reject common tracking pixel patterns
-        tracking_patterns = ["1x1", "pixel", "tracking", "beacon", "analytics"]
-        img_lower = img_url.lower()
+        tracking_patterns = [
+            "1x1",
+            "pixel",
+            "tracking",
+            "beacon",
+            "analytics",
+            "spacer",
+            "blank",
+        ]
         if any(pattern in img_lower for pattern in tracking_patterns):
             return False
 
-        # Try to check image size if URL contains dimensions
-        # Some CDNs include size in URL (e.g., image.jpg?w=100&h=100)
-        size_match = re.search(r"[?&](?:w|width|h|height)=(\d+)", img_url)
+        # Reject very small images based on URL dimensions
+        size_match = re.search(
+            r"[?&_x-](?:w|width|h|height|size)[=_-]?(\d+)", img_url, re.IGNORECASE
+        )
         if size_match:
             size = int(size_match.group(1))
-            if size < 300:
+            if size < 200:
+                return False
+
+        # Reject images with small dimensions in filename (e.g., thumb_100x100.jpg)
+        dim_match = re.search(r"(\d+)x(\d+)", img_url)
+        if dim_match:
+            w, h = int(dim_match.group(1)), int(dim_match.group(2))
+            if w < 200 or h < 150:
                 return False
 
         return True
 
-    # Priority 1: Try og:image meta tag
+    def normalize_image_url(img_url, base_url):
+        """Convert relative URLs to absolute URLs."""
+        if not img_url:
+            return None
+        img_url = img_url.strip()
+        if img_url.startswith("//"):
+            return "https:" + img_url
+        elif img_url.startswith("/"):
+            parsed = urlparse(base_url)
+            return f"{parsed.scheme}://{parsed.netloc}{img_url}"
+        elif not img_url.startswith("http"):
+            # Relative URL without leading slash
+            parsed = urlparse(base_url)
+            base_path = "/".join(parsed.path.split("/")[:-1])
+            return f"{parsed.scheme}://{parsed.netloc}{base_path}/{img_url}"
+        return img_url
+
+    # Try to fetch and parse the page
+    soup = None
     try:
         response = requests.get(
             url,
-            timeout=10,
+            timeout=15,
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
             },
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
+    except Exception as e:
+        print(f"    Warning: Could not fetch {url[:50]}... for image extraction: {e}")
 
-        # Check og:image
+    if soup:
+        # Priority 1: og:image (most reliable)
         og_image = soup.find("meta", property="og:image")
         if og_image and og_image.get("content"):
-            img_url = og_image["content"]
-            # Handle relative URLs
-            if img_url.startswith("//"):
-                img_url = "https:" + img_url
-            elif img_url.startswith("/"):
-                parsed = urlparse(url)
-                img_url = f"{parsed.scheme}://{parsed.netloc}{img_url}"
-
-            if is_valid_image(img_url):
+            img_url = normalize_image_url(og_image["content"], url)
+            if img_url and is_valid_image(img_url):
                 return img_url
 
-        # Priority 2: Try twitter:image
-        twitter_image = soup.find("meta", attrs={"name": "twitter:image"})
-        if twitter_image and twitter_image.get("content"):
-            img_url = twitter_image["content"]
-            # Handle relative URLs
-            if img_url.startswith("//"):
-                img_url = "https:" + img_url
-            elif img_url.startswith("/"):
-                parsed = urlparse(url)
-                img_url = f"{parsed.scheme}://{parsed.netloc}{img_url}"
+        # Priority 2: twitter:image (multiple attribute names)
+        for attr in [
+            {"name": "twitter:image"},
+            {"name": "twitter:image:src"},
+            {"property": "twitter:image"},
+        ]:
+            twitter_image = soup.find("meta", attrs=attr)
+            if twitter_image and twitter_image.get("content"):
+                img_url = normalize_image_url(twitter_image["content"], url)
+                if img_url and is_valid_image(img_url):
+                    return img_url
 
-            if is_valid_image(img_url):
+        # Priority 3: article:image (some publishers use this)
+        article_image = soup.find("meta", property="article:image")
+        if article_image and article_image.get("content"):
+            img_url = normalize_image_url(article_image["content"], url)
+            if img_url and is_valid_image(img_url):
                 return img_url
-    except Exception:
-        pass  # Fall through to Newspaper3k
 
-    # Priority 3: Try Newspaper3k
+        # Priority 4: link rel="image_src" (older standard)
+        link_image = soup.find("link", rel="image_src")
+        if link_image and link_image.get("href"):
+            img_url = normalize_image_url(link_image["href"], url)
+            if img_url and is_valid_image(img_url):
+                return img_url
+
+        # Priority 5: First large image in article content
+        # Look for images in article/main content areas
+        content_selectors = [
+            "article",
+            "main",
+            ".article-body",
+            ".post-content",
+            ".entry-content",
+            "[role='main']",
+        ]
+        for selector in content_selectors:
+            try:
+                content = soup.select_one(selector)
+                if content:
+                    for img in content.find_all("img", src=True)[
+                        :5
+                    ]:  # Check first 5 images
+                        img_url = normalize_image_url(
+                            img.get("src") or img.get("data-src"), url
+                        )
+                        if img_url and is_valid_image(img_url):
+                            # Check if image has reasonable dimensions in attributes
+                            width = img.get("width", "0")
+                            height = img.get("height", "0")
+                            try:
+                                if int(width) >= 300 or int(height) >= 200:
+                                    return img_url
+                            except (ValueError, TypeError):
+                                # No dimensions, check URL for size hints or accept it
+                                if is_valid_image(img_url):
+                                    return img_url
+            except Exception:
+                continue
+
+    # Priority 6: Try Newspaper3k as fallback
     try:
         article = Article(url)
         article.download()
@@ -242,9 +334,9 @@ def extract_image_from_article(url):
         if article.top_image and is_valid_image(article.top_image):
             return article.top_image
     except Exception:
-        pass  # Fall through to fallback
+        pass
 
-    # Priority 4: Fallback placeholder
+    # Priority 7: Fallback placeholder
     return FALLBACK_IMAGE
 
 
@@ -252,22 +344,94 @@ def resolve_google_news_url(google_url):
     """
     Resolve Google News redirect URL to actual article URL.
     Google News RSS feeds return redirect URLs that need to be resolved.
+
+    Google News URL formats:
+    - https://news.google.com/rss/articles/... (base64 encoded)
+    - https://news.google.com/stories/... (redirect)
+    - https://www.google.com/url?... (URL parameter)
     """
-    try:
-        # Follow redirects to get actual URL
-        response = requests.head(google_url, allow_redirects=True, timeout=10)
-        actual_url = response.url
-        return actual_url
-    except Exception:
-        # If HEAD fails, try GET with no redirect following to extract URL
+    import base64
+    from urllib.parse import parse_qs
+
+    # Method 1: Check if URL contains encoded destination in query params
+    if "google.com/url" in google_url:
         try:
-            response = requests.get(google_url, allow_redirects=False, timeout=10)
-            if response.status_code in [301, 302, 303, 307, 308]:
-                location = response.headers.get("Location", "")
-                if location:
-                    return location
+            parsed = urlparse(google_url)
+            params = parse_qs(parsed.query)
+            if "url" in params:
+                return params["url"][0]
+            if "q" in params:
+                return params["q"][0]
         except Exception:
             pass
+
+    # Method 2: Try to extract URL from Google News article ID
+    # Some Google News URLs contain base64-encoded article info
+    if "news.google.com" in google_url and "/articles/" in google_url:
+        try:
+            # Extract the article ID part
+            article_id = google_url.split("/articles/")[-1].split("?")[0]
+            # Try to decode (may contain the actual URL)
+            decoded = base64.urlsafe_b64decode(article_id + "==").decode(
+                "utf-8", errors="ignore"
+            )
+            # Look for http in decoded content
+            if "http" in decoded:
+                url_start = decoded.find("http")
+                url_end = (
+                    decoded.find("\x00", url_start)
+                    if "\x00" in decoded[url_start:]
+                    else len(decoded)
+                )
+                potential_url = decoded[url_start:url_end].strip()
+                if potential_url.startswith("http"):
+                    return potential_url
+        except Exception:
+            pass
+
+    # Method 3: Follow HTTP redirects
+    try:
+        response = requests.head(
+            google_url,
+            allow_redirects=True,
+            timeout=15,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+        )
+        actual_url = response.url
+        # Make sure we didn't just get back a Google URL
+        if "google.com" not in actual_url:
+            return actual_url
+    except Exception:
+        pass
+
+    # Method 4: Try GET request and follow redirects
+    try:
+        response = requests.get(
+            google_url,
+            allow_redirects=True,
+            timeout=15,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+        )
+        actual_url = response.url
+        if "google.com" not in actual_url:
+            return actual_url
+    except Exception:
+        pass
+
+    # Method 5: Try without redirect following to get Location header
+    try:
+        response = requests.get(google_url, allow_redirects=False, timeout=10)
+        if response.status_code in [301, 302, 303, 307, 308]:
+            location = response.headers.get("Location", "")
+            if location and "google.com" not in location:
+                return location
+    except Exception:
+        pass
+
     # If all else fails, return original URL
     return google_url
 
