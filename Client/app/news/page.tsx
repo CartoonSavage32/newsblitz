@@ -14,12 +14,10 @@ export default function News() {
 
   const { data: articles, isLoading } = useNews();
 
-  // Stable shuffle function for "All" category - mixes articles from all categories
-  // Must be called before any early returns to follow Rules of Hooks
-  const shuffledAllArticles = useMemo(() => {
+  // Deduplicate and sort by date DESC (newest first)
+  const sortedAllArticles = useMemo(() => {
     if (!articles) return [];
 
-    // Deduplicate by id to ensure no repeats
     const uniqueArticles = new Map<string, NewsArticle>();
     articles.forEach((article) => {
       if (!uniqueArticles.has(article.id)) {
@@ -27,32 +25,31 @@ export default function News() {
       }
     });
 
-    const allArticles = Array.from(uniqueArticles.values());
-
-    // Fisher-Yates shuffle for stable randomization
-    const shuffled = [...allArticles];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    return shuffled;
+    return Array.from(uniqueArticles.values()).sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime();
+      const dateB = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime();
+      return dateB - dateA;
+    });
   }, [articles]);
 
-  // Filter articles by selected category (case-insensitive comparison)
-  // Must be called before any early returns to follow Rules of Hooks
+  // Filter by category, sort by date DESC
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
 
     if (selectedCategory === "All") {
-      // Return shuffled mix of all articles for "All" tab
-      return shuffledAllArticles;
+      return sortedAllArticles;
     }
-    // For specific categories, return filtered list in original order (no shuffle)
-    return articles.filter((article) => {
+
+    const categoryArticles = articles.filter((article) => {
       return article.category?.toLowerCase().trim() === selectedCategory.toLowerCase().trim();
     });
-  }, [selectedCategory, articles, shuffledAllArticles]);
+
+    return categoryArticles.sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime();
+      const dateB = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime();
+      return dateB - dateA;
+    });
+  }, [selectedCategory, articles, sortedAllArticles]);
 
   if (isLoading || !articles) {
     return (
@@ -61,7 +58,6 @@ export default function News() {
       </div>
     );
   }
-
 
   return isMobile ? (
     <MobileHome
@@ -73,9 +69,7 @@ export default function News() {
     />
   ) : (
     <div className="relative h-full overflow-hidden">
-      {/* Background Pattern - Full page coverage */}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#6b7280_1px,transparent_1px)] [background-size:16px_16px] opacity-60"></div>
-
       <DesktopHome
         filteredArticles={filteredArticles}
         selectedCategory={selectedCategory}
@@ -84,4 +78,3 @@ export default function News() {
     </div>
   );
 }
-

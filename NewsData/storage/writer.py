@@ -15,6 +15,7 @@ class ArticleData:
     published_at: str | None
     article_url: str
     original_content: str
+    story_fingerprint: str
     snippet: str = ""
 
 
@@ -31,6 +32,7 @@ def insert_article(article: ArticleData) -> bool:
             "source": article.source,
             "published_at": article.published_at,
             "article_url": article.article_url,
+            "story_fingerprint": article.story_fingerprint,
             "expired": False,
             "expired_at": lifecycle["expired_at"],
             "gone_at": lifecycle["gone_at"],

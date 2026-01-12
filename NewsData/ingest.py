@@ -13,10 +13,11 @@ from config.settings import MIN_CONTENT_LENGTH, MIN_TITLE_LENGTH
 from extractors.content import extract_content
 from extractors.images import extract_image
 from fetchers.rss_fetcher import RSSArticle, fetch_all_feeds
-from processors.deduplicator import is_duplicate
+from processors.deduplicator import is_duplicate_fingerprint
 from processors.lifecycle import manage_lifecycle
 from processors.summarizer import summarize
 from storage.writer import ArticleData, insert_article
+from utils.fingerprint import generate_story_fingerprint
 
 nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
@@ -26,15 +27,20 @@ def process_article(rss_article: RSSArticle) -> bool:
     """Process single article through pipeline."""
     url = rss_article.link
 
-    if is_duplicate(url):
-        return False
-
     content = extract_content(url, rss_article.title, rss_article.snippet)
     if (
         not content
         or len(content.text) < MIN_CONTENT_LENGTH
         or len(content.title) < MIN_TITLE_LENGTH
     ):
+        return False
+
+    published_at = rss_article.published_date or content.publish_date
+    fingerprint = generate_story_fingerprint(
+        title=content.title, content=content.text, published_at=published_at
+    )
+
+    if is_duplicate_fingerprint(fingerprint, content.title):
         return False
 
     image_url = extract_image(url)
@@ -49,9 +55,10 @@ def process_article(rss_article: RSSArticle) -> bool:
             summary=summary,
             image_url=image_url,
             source=rss_article.source,
-            published_at=rss_article.published_date or content.publish_date,
+            published_at=published_at,
             article_url=url,
             original_content=content.text,
+            story_fingerprint=fingerprint,
             snippet=rss_article.snippet,
         )
     )

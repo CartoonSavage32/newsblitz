@@ -10,30 +10,23 @@ import { notFound } from 'next/navigation';
 import Script from 'next/script';
 import { getArticleWithExpiredStatus, getRelatedArticles } from '@/lib/news/repository';
 
-// Generate metadata for SEO
 // eslint-disable-next-line react-refresh/only-export-components
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const id = extractIdFromSlug(slug);
   if (!id) {
-    return {
-      title: 'Article Not Found | NewsBlitz',
-    };
+    return { title: 'Article Not Found | NewsBlitz' };
   }
 
   const { article, lifecycleState } = await getArticleWithExpiredStatus(id);
   if (!article) {
-    return {
-      title: 'Article Not Found | NewsBlitz',
-    };
+    return { title: 'Article Not Found | NewsBlitz' };
   }
 
-  // Truncate title for SEO (max ~60 chars)
   const seoTitle = article.title.length > 60
     ? `${article.title.substring(0, 57)}...`
     : article.title;
 
-  // Truncate description for meta (140-160 chars)
   const metaDescription = article.description.length > 160
     ? `${article.description.substring(0, 157)}...`
     : article.description;
@@ -41,10 +34,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
   const articleUrl = normalizeUrl(siteUrl, `news/${slug}`);
 
-  // Robots directive based on lifecycle state:
-  // - active: index, follow (normal page)
-  // - expired: index, follow (archived but still accessible)
-  // - gone: noindex, follow (HTTP 410 - tell Google to remove from index)
   const robotsDirective = lifecycleState === 'gone' 
     ? { index: false, follow: true }
     : { index: true, follow: true };
@@ -52,23 +41,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: `${seoTitle} | NewsBlitz`,
     description: metaDescription,
-    alternates: {
-      canonical: articleUrl, // Canonical to self - required for proper indexing
-    },
+    alternates: { canonical: articleUrl },
     robots: robotsDirective,
     openGraph: {
       title: article.title,
       description: article.description,
       type: 'article',
       url: articleUrl,
-      images: [
-        {
-          url: article.imageUrl,
-          width: 1200,
-          height: 630,
-          alt: article.title,
-        },
-      ],
+      images: [{ url: article.imageUrl, width: 1200, height: 630, alt: article.title }],
       publishedTime: article.date.toISOString(),
       authors: [article.publisher],
     },
@@ -86,21 +66,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-/**
- * Article Page - Handles articles in all lifecycle states
- * 
- * Lifecycle States:
- * - ACTIVE (0-48 hours): now < expired_at → HTTP 200, normal page
- * - EXPIRED (48 hours - 7 days): expired_at ≤ now < gone_at → HTTP 200, archived UI
- * - GONE (7-30 days): gone_at ≤ now < deleted_at → HTTP 410, noindex
- * - DELETED (30+ days): now ≥ deleted_at → 404 (row no longer exists)
- * 
- * SEO Strategy:
- * - Active articles get full indexing and sitemap inclusion
- * - Expired articles show archived UI but remain accessible
- * - Gone articles return 410 to tell Google to remove from index
- * - Deleted articles return 404 (row doesn't exist)
- */
 export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const id = extractIdFromSlug(slug);
@@ -113,8 +78,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     notFound();
   }
 
-  // Handle GONE state (7-30 days) - return 410 Gone page
-  // HTTP 410 tells Google the content existed but is permanently gone
+  // Gone state: 410 page
   if (lifecycleState === 'gone') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -131,7 +95,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     );
   }
 
-  // Handle EXPIRED state (48 hours - 7 days) - show archived UI with HTTP 200
+  // Expired state: archived UI
   if (lifecycleState === 'expired') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -152,16 +116,10 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     );
   }
 
-  // ACTIVE state - show full article
-
-  // Fetch related articles from same category for SEO internal linking
   const relatedArticles = await getRelatedArticles(article.category, article.id, 3);
-
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://newsblitz.app';
-  const articleSlug = slug;
-  const articleUrl = normalizeUrl(siteUrl, `news/${articleSlug}`);
+  const articleUrl = normalizeUrl(siteUrl, `news/${slug}`);
 
-  // Structured data (JSON-LD) for SEO
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -170,62 +128,30 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     image: article.imageUrl,
     datePublished: article.date.toISOString(),
     dateModified: article.date.toISOString(),
-    author: {
-      '@type': 'Organization',
-      name: article.publisher,
-    },
+    author: { '@type': 'Organization', name: article.publisher },
     publisher: {
       '@type': 'Organization',
       name: 'NewsBlitz',
-      logo: {
-        '@type': 'ImageObject',
-        url: `${siteUrl}/favicon-192x192.png`,
-      },
+      logo: { '@type': 'ImageObject', url: `${siteUrl}/favicon-192x192.png` },
     },
-    mainEntityOfPage: {
-      '@type': 'WebPage',
-      '@id': articleUrl,
-    },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': articleUrl },
     articleSection: article.category,
-    // Canonical link to original source
     url: article.readMoreUrl,
   };
 
-  // Breadcrumb structured data for SEO
   const breadcrumbStructuredData = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      {
-        '@type': 'ListItem',
-        position: 1,
-        name: 'Home',
-        item: siteUrl,
-      },
-      {
-        '@type': 'ListItem',
-        position: 2,
-        name: 'News',
-        item: `${siteUrl}/news`,
-      },
-      {
-        '@type': 'ListItem',
-        position: 3,
-        name: article.category,
-        item: normalizeUrl(siteUrl, `category/${article.category.toLowerCase()}`),
-      },
-      {
-        '@type': 'ListItem',
-        position: 4,
-        name: article.title,
-        item: articleUrl,
-      },
+      { '@type': 'ListItem', position: 1, name: 'Home', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: 'News', item: `${siteUrl}/news` },
+      { '@type': 'ListItem', position: 3, name: article.category, item: normalizeUrl(siteUrl, `category/${article.category.toLowerCase()}`) },
+      { '@type': 'ListItem', position: 4, name: article.title, item: articleUrl },
     ],
   };
 
   return (
     <>
-      {/* Structured Data (JSON-LD) for SEO - placed in head via Next.js Script */}
       <Script
         id="article-structured-data"
         type="application/ld+json"
@@ -238,7 +164,6 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
       />
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-4xl">
-          {/* Back Button */}
           <div className="mb-6">
             <Button
               variant="ghost"
@@ -252,19 +177,14 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             </Button>
           </div>
 
-          {/* Breadcrumbs for SEO */}
           <nav aria-label="Breadcrumb" className="mb-6">
             <ol className="flex items-center gap-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/" className="hover:text-foreground transition-colors">
-                  Home
-                </Link>
+                <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
               </li>
               <li>/</li>
               <li>
-                <Link href="/news" className="hover:text-foreground transition-colors">
-                  News
-                </Link>
+                <Link href="/news" className="hover:text-foreground transition-colors">News</Link>
               </li>
               <li>/</li>
               <li>
@@ -282,12 +202,9 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             </ol>
           </nav>
 
-          {/* Article Header */}
           <header className="mb-8">
             <div className="flex items-center gap-4 mb-4">
-              <Badge className="bg-primary text-primary-foreground">
-                {article.category}
-              </Badge>
+              <Badge className="bg-primary text-primary-foreground">{article.category}</Badge>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 <time dateTime={article.date.toISOString()}>
@@ -295,15 +212,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 </time>
               </div>
             </div>
-
             <h1 className="text-3xl md:text-4xl font-bold mb-4">{article.title}</h1>
-
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span>Published by: <strong className="text-foreground">{article.publisher}</strong></span>
             </div>
           </header>
 
-          {/* Article Image */}
           <div className="mb-8">
             <img
               src={article.imageUrl}
@@ -312,24 +226,19 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             />
           </div>
 
-          {/* Article Content */}
           <article className="prose prose-lg dark:prose-invert max-w-none mb-8">
             <div className="bg-muted/50 p-4 rounded-lg mb-6">
               <p className="text-sm text-muted-foreground mb-2">
                 <strong>Note:</strong> This is an AI-summarized version of the original article.
               </p>
             </div>
-
             <div className="text-lg leading-relaxed">
               {article.description.split('\n').map((paragraph: string, index: number) => (
-                <p key={index} className="mb-4">
-                  {paragraph}
-                </p>
+                <p key={index} className="mb-4">{paragraph}</p>
               ))}
             </div>
           </article>
 
-          {/* Source Attribution & Read More */}
           <div className="border-t pt-8 mt-8">
             <div className="bg-muted/30 p-6 rounded-lg">
               <p className="text-sm text-muted-foreground mb-4">
@@ -354,7 +263,6 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                   articleTitle={article.title}
                 />
               </div>
-              {/* Link to original source for attribution */}
               <p className="text-xs text-muted-foreground">
                 Original article:{' '}
                 <a
@@ -369,7 +277,6 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
 
-          {/* Related Articles Section - SEO Internal Linking */}
           {relatedArticles.length > 0 && (
             <div className="mt-8 pt-8 border-t">
               <h2 className="text-2xl font-bold mb-4">More {article.category} News</h2>
@@ -394,7 +301,6 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
             </div>
           )}
 
-          {/* Category Link */}
           <div className="mt-8 pt-8 border-t">
             <Link
               href={`/category/${article.category.toLowerCase()}`}
@@ -408,4 +314,3 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     </>
   );
 }
-
