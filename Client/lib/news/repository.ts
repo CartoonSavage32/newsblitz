@@ -111,44 +111,45 @@ export async function insertNewsArticles(articles: Omit<DBArticle, 'id' | 'creat
 
 // Get article by ID (supports 8-char prefix), includes expired for 410 handling
 export async function getArticleById(id: string, includeExpired: boolean = true): Promise<NewsArticle | null> {
-  let query = supabase
-    .from('news_articles')
-    .select('*')
-    .eq('id', id);
+  let data: DBArticle | null = null;
 
-  if (!includeExpired) {
-    query = query.eq('expired', false);
-  }
-
-  let { data, error } = await query.single();
-
-  // Try prefix match for 8-char IDs
-  if ((error || !data) && id.length === 8) {
-    let prefixQuery = supabase
+  if (id.length === 8) {
+    // 8-char prefix: fetch articles and find by prefix
+    let query = supabase
       .from('news_articles')
       .select('*')
-      .limit(1000);
+      .order('created_at', { ascending: false });
 
     if (!includeExpired) {
-      prefixQuery = prefixQuery.eq('expired', false);
+      query = query.eq('expired', false);
     }
 
-    const { data: allData, error: allError } = await prefixQuery;
+    const { data: articles, error } = await query;
+    if (!error && articles) {
+      data = articles.find((a: DBArticle) => a.id.startsWith(id)) || null;
+    }
+  } else {
+    // Full UUID - exact match
+    let query = supabase
+      .from('news_articles')
+      .select('*')
+      .eq('id', id);
 
-    if (!allError && allData) {
-      const matched = allData.find((article: DBArticle) => article.id.startsWith(id));
-      if (matched) {
-        data = matched;
-        error = null;
-      }
+    if (!includeExpired) {
+      query = query.eq('expired', false);
+    }
+
+    const { data: exactMatch, error } = await query.single();
+    if (!error && exactMatch) {
+      data = exactMatch as DBArticle;
     }
   }
 
-  if (error || !data) {
+  if (!data) {
     return null;
   }
 
-  return transformDBArticleToNewsArticle(data as DBArticle);
+  return transformDBArticleToNewsArticle(data);
 }
 
 function getArticleLifecycleState(dbArticle: DBArticle): ArticleLifecycleState {
@@ -174,29 +175,33 @@ export async function getArticleWithExpiredStatus(id: string): Promise<{
   expired: boolean;
   lifecycleState: ArticleLifecycleState;
 }> {
-  let { data, error } = await supabase
-    .from('news_articles')
-    .select('*')
-    .eq('id', id)
-    .single();
+  let data: DBArticle | null = null;
 
-  // Try prefix match for 8-char IDs
-  if ((error || !data) && id.length === 8) {
-    const { data: allData, error: allError } = await supabase
+  if (id.length === 8) {
+    // 8-char prefix: fetch recent articles and find by prefix
+    // Order by created_at desc to get newest first (more likely to match)
+    const { data: articles, error } = await supabase
       .from('news_articles')
       .select('*')
-      .limit(1000);
+      .order('created_at', { ascending: false });
 
-    if (!allError && allData) {
-      const matched = allData.find((article: DBArticle) => article.id.startsWith(id));
-      if (matched) {
-        data = matched;
-        error = null;
-      }
+    if (!error && articles) {
+      data = articles.find((a: DBArticle) => a.id.startsWith(id)) || null;
+    }
+  } else {
+    // Full UUID - exact match
+    const { data: exactMatch, error } = await supabase
+      .from('news_articles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!error && exactMatch) {
+      data = exactMatch as DBArticle;
     }
   }
 
-  if (error || !data) {
+  if (!data) {
     return { article: null, expired: false, lifecycleState: 'deleted' };
   }
 
