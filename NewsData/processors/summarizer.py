@@ -14,7 +14,7 @@ PROMPT = (
 def summarize(text: str) -> str | None:
     """Summarize article text (80-100 words)."""
     payload = {
-        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+        "model": "liquid/lfm-2.5-1.2b-thinking:free",
         "prompt": PROMPT + text,
         "temperature": 0.3,
         "max_tokens": 200,
